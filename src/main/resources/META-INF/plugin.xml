@@ -49,50 +49,74 @@
     </extensions>
 
     <actions>
-        <!-- Server management actions -->
-        <action id="dzide.AddServer"
-                class="com.zoho.dzide.actions.AddServerAction"
-                text="Add Tomcat Server"
-                description="Add a new Tomcat server"
-                icon="AllIcons.General.Add"/>
+        <!-- DZIDE top-level menu in the main menu bar -->
+        <group id="dzide.MainMenu"
+               text="DZIDE"
+               description="DZIDE Tomcat Server Management"
+               popup="true">
+            <add-to-group group-id="MainMenu" anchor="before" relative-to-action="HelpMenu"/>
 
-        <action id="dzide.RefreshServers"
-                class="com.zoho.dzide.actions.RefreshServersAction"
-                text="Refresh"
-                description="Refresh server status"
-                icon="AllIcons.Actions.Refresh"/>
+            <action id="dzide.AddServer"
+                    class="com.zoho.dzide.actions.AddServerAction"
+                    text="Add Tomcat Server"
+                    description="Add a new Tomcat server"
+                    icon="AllIcons.General.Add"/>
 
-        <action id="dzide.StartServer"
-                class="com.zoho.dzide.actions.StartServerAction"
-                text="Start Server"
-                description="Start Tomcat server"
-                icon="AllIcons.Actions.Execute"/>
+            <action id="dzide.EditServer"
+                    class="com.zoho.dzide.actions.EditServerAction"
+                    text="Edit Server"
+                    description="Edit Tomcat server settings"
+                    icon="AllIcons.Actions.Edit"/>
 
-        <action id="dzide.StopServer"
-                class="com.zoho.dzide.actions.StopServerAction"
-                text="Stop Server"
-                description="Stop Tomcat server"
-                icon="AllIcons.Actions.Suspend"/>
+            <action id="dzide.RemoveServer"
+                    class="com.zoho.dzide.actions.RemoveServerAction"
+                    text="Remove Server"
+                    description="Remove this Tomcat server"
+                    icon="AllIcons.General.Remove"/>
 
-        <action id="dzide.RedeployWar"
-                class="com.zoho.dzide.actions.RedeployWarAction"
-                text="Redeploy WAR"
-                description="Deploy a WAR file to the server"
-                icon="AllIcons.Actions.Upload"/>
+            <separator/>
 
-        <action id="dzide.RemoveServer"
-                class="com.zoho.dzide.actions.RemoveServerAction"
-                text="Remove Server"
-                description="Remove this Tomcat server"
-                icon="AllIcons.General.Remove"/>
+            <action id="dzide.StartServer"
+                    class="com.zoho.dzide.actions.StartServerAction"
+                    text="Run"
+                    description="Start Tomcat server"
+                    icon="AllIcons.Actions.Execute"/>
 
-        <action id="dzide.EditServer"
-                class="com.zoho.dzide.actions.EditServerAction"
-                text="Edit Server"
-                description="Edit Tomcat server settings"
-                icon="AllIcons.Actions.Edit"/>
+            <action id="dzide.DebugOnServer"
+                    class="com.zoho.dzide.actions.DebugOnServerAction"
+                    text="Debug"
+                    description="Debug project on Tomcat"
+                    icon="AllIcons.Actions.StartDebugger"/>
 
-        <action id="dzide.RunOnServer"
+            <action id="dzide.StopServer"
+                    class="com.zoho.dzide.actions.StopServerAction"
+                    text="Stop"
+                    description="Stop Tomcat server"
+                    icon="AllIcons.Actions.Suspend"/>
+
+            <action id="dzide.RefreshServers"
+                    class="com.zoho.dzide.actions.RefreshServersAction"
+                    text="Refresh"
+                    description="Refresh server status"
+                    icon="AllIcons.Actions.Refresh"/>
+
+            <separator/>
+
+            <action id="dzide.RedeployWar"
+                    class="com.zoho.dzide.actions.RedeployWarAction"
+                    text="Redeploy WAR"
+                    description="Deploy a WAR file to the server"
+                    icon="AllIcons.Actions.Upload"/>
+
+            <action id="dzide.AppLogs"
+                    class="com.zoho.dzide.actions.AppLogsAction"
+                    text="App Logs"
+                    description="Show application logs"
+                    icon="AllIcons.Debugger.Console"/>
+        </group>
+
+        <!-- Also keep Run/Debug in project view right-click menu -->
+        <action id="dzide.RunOnServer.ProjectView"
                 class="com.zoho.dzide.actions.RunOnServerAction"
                 text="Run on Tomcat Server"
                 description="Run project on Tomcat"
@@ -100,7 +124,7 @@
             <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
         </action>
 
-        <action id="dzide.DebugOnServer"
+        <action id="dzide.DebugOnServer.ProjectView"
                 class="com.zoho.dzide.actions.DebugOnServerAction"
                 text="Debug on Tomcat Server"
                 description="Debug project on Tomcat"

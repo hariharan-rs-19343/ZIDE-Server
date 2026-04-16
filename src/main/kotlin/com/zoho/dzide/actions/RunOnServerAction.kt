@@ -36,22 +36,20 @@ class RunOnServerAction : AnAction("Run on Tomcat Server", "Run project on Tomca
     }
 }
 
-class DebugOnServerAction : AnAction("Debug on Tomcat Server", "Debug project on Tomcat", null) {
+class DebugOnServerAction : AnAction("Debug", "Start server in debug mode and attach debugger", null) {
 
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
-        val projectPath = project.basePath ?: return
-        val serverProvider = TomcatServerProvider.getInstance(project)
+        val server = ServerActionUtil.getSelectedServer(e) ?: return
         val tomcatManager = TomcatManager.getInstance(project)
 
-        val selection = resolveExecutionSelection(e, serverProvider, projectPath) ?: return
+        val debugPort = server.debugPort?.takeIf { it > 0 }
+            ?: com.zoho.dzide.util.PortUtil.findAvailablePort(8000)
 
-        val debugPort = tomcatManager.debugProjectOnServer(
-            selection.server, projectPath, selection.contextPath, selection.warFilePath
-        )
+        try {
+            tomcatManager.startServerInDebug(server, debugPort)
 
-        if (debugPort != null) {
-            // Attach debugger using IntelliJ's Remote JVM Debug
+            // Attach IntelliJ remote debugger
             val runManager = com.intellij.execution.RunManager.getInstance(project)
             val remoteConfigType = com.intellij.execution.configurations.ConfigurationTypeUtil
                 .findConfigurationType("Remote")
@@ -59,7 +57,7 @@ class DebugOnServerAction : AnAction("Debug on Tomcat Server", "Debug project on
                 val factory = remoteConfigType.configurationFactories.firstOrNull()
                 if (factory != null) {
                     val settings = runManager.createConfiguration(
-                        "Attach ${selection.server.name}", factory
+                        "Debug ${server.name}", factory
                     )
                     val remoteConfig = settings.configuration as? com.intellij.execution.remote.RemoteConfiguration
                     if (remoteConfig != null) {
@@ -72,13 +70,13 @@ class DebugOnServerAction : AnAction("Debug on Tomcat Server", "Debug project on
                             settings,
                             com.intellij.execution.executors.DefaultDebugExecutor.getDebugExecutorInstance()
                         )
-                        NotificationUtil.info(project, "Debugger attaching to ${selection.server.name} on port $debugPort.")
+                        NotificationUtil.info(project, "Debugger attaching to ${server.name} on port $debugPort.")
                     }
                 }
             }
+        } catch (ex: Exception) {
+            NotificationUtil.error(project, "Debug failed: ${ex.message}")
         }
-
-        tomcatManager.refreshAllServerStatus()
     }
 }
 
