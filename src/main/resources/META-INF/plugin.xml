@@ -1,9 +1,9 @@
 <idea-plugin>
     <id>com.zoho.dzide</id>
-    <name>DZIDE</name>
+    <name>ZIDE</name>
     <vendor>Zoho</vendor>
     <description><![CDATA[
-        DZIDE — Tomcat server management and ZIDE auto-configuration for IntelliJ IDEA.
+        ZIDE — Tomcat server management and ZIDE auto-configuration for IntelliJ IDEA.
         <ul>
             <li>Add / Edit / Remove Tomcat servers from a dedicated tool window</li>
             <li>Start / Stop servers with real-time log output</li>
@@ -12,6 +12,24 @@
             <li>Deploy-sync on save: ANT hooks and compiled class file copy</li>
         </ul>
     ]]></description>
+
+    <change-notes><![CDATA[
+        <b>0.0.1 — Initial Release</b>
+        <ul>
+            <li>SAS-ZIDE tool window with Servers, Output, and App Logs tabs</li>
+            <li>Add / Edit / Remove Tomcat server configurations</li>
+            <li>Run server in foreground mode (catalina.sh run)</li>
+            <li>Debug with JPDA auto-attach (waits for debug port readiness)</li>
+            <li>Stop server by destroying the attached process</li>
+            <li>ANT build integration from project directory</li>
+            <li>Update Deployment — deploy zip to ZIDE deployment folder</li>
+            <li>App Logs viewer with color-coded ERROR/WARN highlighting</li>
+            <li>Deploy-sync on save: class file copy, ANT hooks, auto-resource copy</li>
+            <li>ZIDE auto-configuration from Eclipse .zide_resources/</li>
+            <li>ZIDE menu in the main menu bar</li>
+            <li>Debug on Tomcat in Project View context menu</li>
+        </ul>
+    ]]></change-notes>
 
     <depends>com.intellij.modules.platform</depends>
     <depends>com.intellij.java</depends>

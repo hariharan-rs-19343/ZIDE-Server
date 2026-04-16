@@ -2,9 +2,9 @@
   <idea-version since-build="241" />
   <version>0.0.1</version>
   <id>com.zoho.dzide</id>
-  <name>DZIDE</name>
+  <name>ZIDE</name>
   <vendor>Zoho</vendor>
-  <description><![CDATA[DZIDE — Tomcat server management and ZIDE auto-configuration for IntelliJ IDEA.
+  <description><![CDATA[ZIDE — Tomcat server management and ZIDE auto-configuration for IntelliJ IDEA.
 <ul>
     <li>Add / Edit / Remove Tomcat servers from a dedicated tool window</li>
     <li>Start / Stop servers with real-time log output</li>

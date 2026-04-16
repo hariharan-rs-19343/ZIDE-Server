@@ -41,7 +41,7 @@ intellijPlatform {
             name = "Zoho"
         }
         description = """
-            DZIDE — Tomcat server management and ZIDE auto-configuration for IntelliJ IDEA.
+            ZIDE — Tomcat server management and ZIDE auto-configuration for IntelliJ IDEA.
             <ul>
                 <li>Add / Edit / Remove Tomcat servers from a dedicated tool window</li>
                 <li>Start / Stop servers with real-time log output</li>
