@@ -2,8 +2,10 @@ package com.zoho.dzide.actions
 
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
+import com.intellij.openapi.application.ApplicationManager
 import com.zoho.dzide.tomcat.TomcatManager
 import com.zoho.dzide.util.NotificationUtil
+import com.zoho.dzide.util.PortUtil
 
 class DebugOnServerAction : AnAction("Debug", "Start server in debug mode and attach debugger", null) {
 
@@ -13,33 +15,56 @@ class DebugOnServerAction : AnAction("Debug", "Start server in debug mode and at
         val tomcatManager = TomcatManager.getInstance(project)
 
         val debugPort = server.debugPort?.takeIf { it > 0 }
-            ?: com.zoho.dzide.util.PortUtil.findAvailablePort(8000)
+            ?: PortUtil.findAvailablePort(8000)
 
         try {
             tomcatManager.startServerInDebug(server, debugPort)
 
-            // Attach IntelliJ remote debugger
-            val runManager = com.intellij.execution.RunManager.getInstance(project)
-            val remoteConfigType = com.intellij.execution.configurations.ConfigurationTypeUtil
-                .findConfigurationType("Remote")
-            if (remoteConfigType != null) {
-                val factory = remoteConfigType.configurationFactories.firstOrNull()
-                if (factory != null) {
-                    val settings = runManager.createConfiguration(
-                        "Debug ${server.name}", factory
-                    )
-                    val remoteConfig = settings.configuration as? com.intellij.execution.remote.RemoteConfiguration
-                    if (remoteConfig != null) {
-                        remoteConfig.HOST = "localhost"
-                        remoteConfig.PORT = debugPort.toString()
-                        settings.isTemporary = true
-                        runManager.addConfiguration(settings)
-                        runManager.selectedConfiguration = settings
-                        com.intellij.execution.ProgramRunnerUtil.executeConfiguration(
-                            settings,
-                            com.intellij.execution.executors.DefaultDebugExecutor.getDebugExecutorInstance()
-                        )
-                        NotificationUtil.info(project, "Debugger attaching to ${server.name} on port $debugPort.")
+            // Wait for the debug port to be ready before attaching
+            NotificationUtil.info(project, "Waiting for debug port $debugPort to be ready...")
+            ApplicationManager.getApplication().executeOnPooledThread {
+                val ready = PortUtil.waitForPort(debugPort, 60000)
+                if (!ready) {
+                    ApplicationManager.getApplication().invokeLater {
+                        if (!project.isDisposed) {
+                            NotificationUtil.error(project, "Debug port $debugPort did not become available. Server may have failed to start.")
+                        }
+                    }
+                    return@executeOnPooledThread
+                }
+
+                // Small extra delay to let JPDA fully initialize after port opens
+                Thread.sleep(1000)
+
+                ApplicationManager.getApplication().invokeLater {
+                    if (project.isDisposed) return@invokeLater
+                    try {
+                        val runManager = com.intellij.execution.RunManager.getInstance(project)
+                        val remoteConfigType = com.intellij.execution.configurations.ConfigurationTypeUtil
+                            .findConfigurationType("Remote")
+                        if (remoteConfigType != null) {
+                            val factory = remoteConfigType.configurationFactories.firstOrNull()
+                            if (factory != null) {
+                                val settings = runManager.createConfiguration(
+                                    "Debug ${server.name}", factory
+                                )
+                                val remoteConfig = settings.configuration as? com.intellij.execution.remote.RemoteConfiguration
+                                if (remoteConfig != null) {
+                                    remoteConfig.HOST = "localhost"
+                                    remoteConfig.PORT = debugPort.toString()
+                                    settings.isTemporary = true
+                                    runManager.addConfiguration(settings)
+                                    runManager.selectedConfiguration = settings
+                                    com.intellij.execution.ProgramRunnerUtil.executeConfiguration(
+                                        settings,
+                                        com.intellij.execution.executors.DefaultDebugExecutor.getDebugExecutorInstance()
+                                    )
+                                    NotificationUtil.info(project, "Debugger attaching to ${server.name} on port $debugPort.")
+                                }
+                            }
+                        }
+                    } catch (ex: Exception) {
+                        NotificationUtil.error(project, "Failed to attach debugger: ${ex.message}")
                     }
                 }
             }

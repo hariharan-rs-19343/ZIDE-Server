@@ -1,5 +1,6 @@
 package com.zoho.dzide.tomcat
 
+import com.intellij.execution.process.OSProcessHandler
 import com.intellij.execution.ui.ConsoleView
 import com.intellij.execution.ui.ConsoleViewContentType
 import com.intellij.openapi.components.Service
@@ -18,6 +19,8 @@ import kotlin.io.path.exists
 class TomcatManager(private val project: Project) {
 
     var consoleView: ConsoleView? = null
+    var appLogsConsoleView: ConsoleView? = null
+    private val serverProcesses = mutableMapOf<String, OSProcessHandler>()
     private val serverProvider: TomcatServerProvider
         get() = TomcatServerProvider.getInstance(project)
 
@@ -99,7 +102,7 @@ class TomcatManager(private val project: Project) {
         val command = ShellUtil.buildShellCommand(
             *env.map { "export ${it.key}=${ShellUtil.shellEscapeSingleQuoted(it.value)}" }.toTypedArray(),
             "&&", "chmod", "+x", "\"$script\"",
-            "&&", "sh", "\"$script\"", "start"
+            "&&", "sh", "\"$script\"", "run"
         )
 
         com.zoho.dzide.util.ProcessUtil.executeStreaming(
@@ -108,21 +111,27 @@ class TomcatManager(private val project: Project) {
             onStdout = { log(it) },
             onStderr = { logError("STDERR: $it") },
             onExit = { exitCode ->
-                log("Command completed with exit code: $exitCode")
-                // Check if actually running after a delay
-                Thread.sleep(3000)
-                val running = PortUtil.isPortInUse(server.port)
+                serverProcesses.remove(server.id)
+                log("Server process exited with code: $exitCode")
+                serverProvider.updateServer(server.id, mapOf("status" to "stopped"))
+                log("Server ${server.name} stopped.")
+                NotificationUtil.info(project, "Tomcat server ${server.name} stopped.")
+            }
+        ).also { handler ->
+            serverProcesses[server.id] = handler
+            // Wait for port to confirm startup
+            Thread {
+                val running = PortUtil.waitForPort(server.port, 45000)
                 if (running) {
                     serverProvider.updateServer(server.id, mapOf("status" to "running"))
                     log("Server ${server.name} started successfully!")
                     NotificationUtil.info(project, "Tomcat server ${server.name} started successfully!")
                 } else {
-                    serverProvider.updateServer(server.id, mapOf("status" to "stopped"))
                     logError("Server ${server.name} failed to start - no process on port ${server.port}")
                     NotificationUtil.error(project, "Server ${server.name} failed to start.")
                 }
-            }
-        )
+            }.start()
+        }
     }
 
     fun startServerInDebug(server: TomcatServer, debugPort: Int) {
@@ -150,7 +159,7 @@ class TomcatManager(private val project: Project) {
         val command = ShellUtil.buildShellCommand(
             *env.map { "export ${it.key}=${ShellUtil.shellEscapeSingleQuoted(it.value)}" }.toTypedArray(),
             "&&", "chmod", "+x", "\"$script\"",
-            "&&", "sh", "\"$script\"", "jpda", "start"
+            "&&", "sh", "\"$script\"", "jpda", "run"
         )
 
         com.zoho.dzide.util.ProcessUtil.executeStreaming(
@@ -159,29 +168,32 @@ class TomcatManager(private val project: Project) {
             onStdout = { log(it) },
             onStderr = { logError("STDERR: $it") },
             onExit = { _ ->
+                serverProcesses.remove(server.id)
+                serverProvider.updateServer(server.id, mapOf("status" to "stopped"))
+                log("Server ${server.name} (debug) stopped.")
+                NotificationUtil.info(project, "Tomcat server ${server.name} stopped.")
+            }
+        ).also { handler ->
+            serverProcesses[server.id] = handler
+            // Wait for ports to confirm startup
+            Thread {
                 val httpRunning = PortUtil.waitForPort(server.port, 45000)
                 val debugRunning = PortUtil.waitForPort(debugPort, 45000)
                 if (httpRunning && debugRunning) {
                     serverProvider.updateServer(server.id, mapOf("status" to "running", "debugPort" to debugPort))
                     log("Server ${server.name} started in debug mode.")
                 } else {
-                    serverProvider.updateServer(server.id, mapOf("status" to "stopped"))
                     logError("Server failed to start in debug mode. HTTP: $httpRunning, debug ($debugPort): $debugRunning")
                 }
-            }
-        )
+            }.start()
+        }
     }
 
     fun stopServer(server: TomcatServer) {
-        val script = ShellUtil.catalinaScript(server.path)
-        if (!script.exists()) {
-            NotificationUtil.error(project, "Shutdown script not found at $script")
-            return
-        }
-
         if (!PortUtil.isPortInUse(server.port)) {
             log("Server ${server.name} is not running on port ${server.port}")
             NotificationUtil.warn(project, "Server ${server.name} is not running!")
+            serverProcesses.remove(server.id)
             serverProvider.updateServer(server.id, mapOf("status" to "stopped"))
             return
         }
@@ -191,31 +203,46 @@ class TomcatManager(private val project: Project) {
         log("======================================")
         NotificationUtil.info(project, "Stopping Tomcat server: ${server.name}...")
 
-        val command = ShellUtil.buildShellCommand(
-            "export", "CATALINA_PID=pid.file",
-            "&&", "chmod", "+x", "\"$script\"",
-            "&&", "sh", "\"$script\"", "stop", "-force"
-        )
-
-        com.zoho.dzide.util.ProcessUtil.executeStreaming(
-            command = command,
-            workingDir = server.path,
-            onStdout = { log(it) },
-            onStderr = { logError("STDERR: $it") },
-            onExit = { _ ->
-                Thread.sleep(2000)
-                val stillRunning = PortUtil.isPortInUse(server.port)
-                if (!stillRunning) {
-                    serverProvider.updateServer(server.id, mapOf("status" to "stopped"))
-                    log("Server ${server.name} stopped successfully!")
-                    NotificationUtil.info(project, "Tomcat server ${server.name} stopped successfully!")
-                } else {
-                    serverProvider.updateServer(server.id, mapOf("status" to "running"))
-                    logError("Server ${server.name} may still be running on port ${server.port}")
-                    NotificationUtil.warn(project, "Server ${server.name} may still be running.")
-                }
+        val handler = serverProcesses.remove(server.id)
+        if (handler != null && !handler.isProcessTerminated) {
+            handler.destroyProcess()
+            log("Destroyed foreground Tomcat process for ${server.name}.")
+        } else {
+            // Fallback: use catalina.sh stop if we don't have the process handle
+            val script = ShellUtil.catalinaScript(server.path)
+            if (!script.exists()) {
+                NotificationUtil.error(project, "Shutdown script not found at $script")
+                return
             }
-        )
+            log("No attached process found. Falling back to catalina.sh stop.")
+            val command = ShellUtil.buildShellCommand(
+                "export", "CATALINA_PID=pid.file",
+                "&&", "chmod", "+x", "\"$script\"",
+                "&&", "sh", "\"$script\"", "stop", "-force"
+            )
+            com.zoho.dzide.util.ProcessUtil.executeStreaming(
+                command = command,
+                workingDir = server.path,
+                onStdout = { log(it) },
+                onStderr = { logError("STDERR: $it") },
+                onExit = { _ -> }
+            )
+        }
+
+        // Verify shutdown
+        Thread {
+            Thread.sleep(3000)
+            val stillRunning = PortUtil.isPortInUse(server.port)
+            if (!stillRunning) {
+                serverProvider.updateServer(server.id, mapOf("status" to "stopped"))
+                log("Server ${server.name} stopped successfully!")
+                NotificationUtil.info(project, "Tomcat server ${server.name} stopped successfully!")
+            } else {
+                serverProvider.updateServer(server.id, mapOf("status" to "running"))
+                logError("Server ${server.name} may still be running on port ${server.port}")
+                NotificationUtil.warn(project, "Server ${server.name} may still be running.")
+            }
+        }.start()
     }
 
     fun refreshAllServerStatus() {

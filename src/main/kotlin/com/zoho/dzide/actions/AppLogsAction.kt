@@ -19,10 +19,10 @@ class AppLogsAction : AnAction("App Logs", "Show application logs from server lo
         val project = e.project ?: return
         val server = ServerActionUtil.getSelectedServer(e) ?: return
         val tomcatManager = TomcatManager.getInstance(project)
-        val console = tomcatManager.consoleView
+        val console = tomcatManager.appLogsConsoleView
 
         if (console == null) {
-            NotificationUtil.error(project, "Console not available. Open the SAS-ZIDE tool window first.")
+            NotificationUtil.error(project, "App Logs console not available. Open the SAS-ZIDE tool window first.")
             return
         }
 
@@ -45,12 +45,12 @@ class AppLogsAction : AnAction("App Logs", "Show application logs from server lo
             return
         }
 
-        // Switch to the Output tab in the tool window
+        // Switch to the App Logs tab in the tool window
         val toolWindow = ToolWindowManager.getInstance(project).getToolWindow("SAS-ZIDE")
         toolWindow?.show {
-            val outputContent = toolWindow.contentManager.findContent("Output")
-            if (outputContent != null) {
-                toolWindow.contentManager.setSelectedContent(outputContent)
+            val appLogsContent = toolWindow.contentManager.findContent("App Logs")
+            if (appLogsContent != null) {
+                toolWindow.contentManager.setSelectedContent(appLogsContent)
             }
         }
 

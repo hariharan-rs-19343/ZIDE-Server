@@ -49,6 +49,15 @@ class TomcatToolWindowFactory : ToolWindowFactory {
         val consoleContent = contentFactory.createContent(console.component, "Output", false)
         toolWindow.contentManager.addContent(consoleContent)
 
+        // Create App Logs console panel
+        val appLogsConsole: ConsoleView = TextConsoleBuilderFactory.getInstance()
+            .createBuilder(project)
+            .console
+        tomcatManager.appLogsConsoleView = appLogsConsole
+
+        val appLogsContent = contentFactory.createContent(appLogsConsole.component, "App Logs", false)
+        toolWindow.contentManager.addContent(appLogsContent)
+
         // Listen for changes
         serverProvider.addChangeListener {
             treeModel.reload()
