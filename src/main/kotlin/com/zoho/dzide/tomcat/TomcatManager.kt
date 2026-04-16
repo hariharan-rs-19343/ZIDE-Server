@@ -229,20 +229,50 @@ class TomcatManager(private val project: Project) {
             )
         }
 
-        // Verify shutdown
+        // Verify shutdown, fallback to lsof + kill if still running
         Thread {
             Thread.sleep(3000)
-            val stillRunning = PortUtil.isPortInUse(server.port)
+            var stillRunning = PortUtil.isPortInUse(server.port)
+            if (stillRunning) {
+                log("Server still running on port ${server.port}. Attempting force kill via lsof...")
+                forceKillByPort(server.port)
+                Thread.sleep(2000)
+                stillRunning = PortUtil.isPortInUse(server.port)
+            }
             if (!stillRunning) {
                 serverProvider.updateServer(server.id, mapOf("status" to "stopped"))
                 log("Server ${server.name} stopped successfully!")
                 NotificationUtil.info(project, "Tomcat server ${server.name} stopped successfully!")
             } else {
                 serverProvider.updateServer(server.id, mapOf("status" to "running"))
-                logError("Server ${server.name} may still be running on port ${server.port}")
-                NotificationUtil.warn(project, "Server ${server.name} may still be running.")
+                logError("Server ${server.name} could not be stopped on port ${server.port}")
+                NotificationUtil.error(project, "Failed to stop server ${server.name}. Manual intervention required.")
             }
         }.start()
+    }
+
+    private fun forceKillByPort(port: Int) {
+        try {
+            val lsofResult = com.zoho.dzide.util.ProcessUtil.executeCapturing(
+                command = listOf("lsof", "-ti", ":$port"),
+                timeoutMs = 5000
+            )
+            val pids = lsofResult.stdout.trim().lines().filter { it.isNotBlank() }
+            if (pids.isEmpty()) {
+                log("No PIDs found via lsof for port $port")
+                return
+            }
+            for (pid in pids) {
+                log("Killing PID $pid on port $port")
+                com.zoho.dzide.util.ProcessUtil.executeCapturing(
+                    command = listOf("kill", "-9", pid),
+                    timeoutMs = 5000
+                )
+            }
+            log("Force kill sent for PIDs: ${pids.joinToString(", ")}")
+        } catch (ex: Exception) {
+            logError("Force kill failed: ${ex.message}")
+        }
     }
 
     fun refreshAllServerStatus() {

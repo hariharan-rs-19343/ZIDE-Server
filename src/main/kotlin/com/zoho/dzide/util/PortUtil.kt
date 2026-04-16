@@ -25,6 +25,15 @@ object PortUtil {
         return false
     }
 
+    fun waitForPortRelease(port: Int, timeoutMs: Long = 30_000, intervalMs: Long = 1000): Boolean {
+        val start = System.currentTimeMillis()
+        while (System.currentTimeMillis() - start < timeoutMs) {
+            if (!isPortInUse(port)) return true
+            Thread.sleep(intervalMs)
+        }
+        return false
+    }
+
     fun findAvailablePort(basePort: Int, range: Int = 200): Int {
         val start = if (basePort >= 1024) basePort else 5005
         for (port in start until start + range) {
