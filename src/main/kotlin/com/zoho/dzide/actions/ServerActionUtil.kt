@@ -19,7 +19,7 @@ object ServerActionUtil {
         val project = e.project ?: return null
 
         // Try to get from tree selection in tool window
-        val toolWindow = ToolWindowManager.getInstance(project).getToolWindow("DZIDE Tomcat")
+        val toolWindow = ToolWindowManager.getInstance(project).getToolWindow("SAS-ZIDE")
         if (toolWindow != null) {
             val content = toolWindow.contentManager.selectedContent
             if (content != null) {

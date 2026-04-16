@@ -4,7 +4,7 @@ import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.zoho.dzide.tomcat.TomcatManager
 
-class StopServerAction : AnAction("Stop Server", "Stop Tomcat server", null) {
+class StopServerAction : AnAction("Stop", "Stop Tomcat server", null) {
 
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return

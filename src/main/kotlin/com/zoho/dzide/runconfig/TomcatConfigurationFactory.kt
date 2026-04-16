@@ -8,7 +8,7 @@ import com.intellij.openapi.project.Project
 
 class TomcatConfigurationFactory(type: ConfigurationType) : ConfigurationFactory(type) {
     override fun createTemplateConfiguration(project: Project): RunConfiguration =
-        TomcatRunConfiguration(project, this, "DZIDE Tomcat")
+        TomcatRunConfiguration(project, this, "SAS-ZIDE")
 
     override fun getId(): String = "DzideTomcatConfigurationFactory"
 

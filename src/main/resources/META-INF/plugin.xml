@@ -30,8 +30,8 @@
         <projectService serviceImplementation="com.zoho.dzide.deploysync.ResourceSyncManager"/>
 
         <!-- Tool window -->
-        <toolWindow id="DZIDE Tomcat"
-                    anchor="right"
+        <toolWindow id="SAS-ZIDE"
+                    anchor="bottom"
                     icon="AllIcons.Actions.Execute"
                     factoryClass="com.zoho.dzide.toolwindow.TomcatToolWindowFactory"/>
 
@@ -41,7 +41,7 @@
         <!-- Notification group -->
         <notificationGroup id="DZIDE Notifications"
                           displayType="BALLOON"
-                          toolWindowId="DZIDE Tomcat"/>
+                          toolWindowId="SAS-ZIDE"/>
 
         <!-- File save listener for deploy sync -->
         <fileDocumentManagerListener
@@ -49,10 +49,10 @@
     </extensions>
 
     <actions>
-        <!-- DZIDE top-level menu in the main menu bar -->
+        <!-- ZIDE top-level menu in the main menu bar -->
         <group id="dzide.MainMenu"
-               text="DZIDE"
-               description="DZIDE Tomcat Server Management"
+               text="ZIDE"
+               description="ZIDE Tomcat Server Management"
                popup="true">
             <add-to-group group-id="MainMenu" anchor="before" relative-to-action="HelpMenu"/>
 
@@ -102,10 +102,16 @@
 
             <separator/>
 
-            <action id="dzide.RedeployWar"
-                    class="com.zoho.dzide.actions.RedeployWarAction"
-                    text="Redeploy WAR"
-                    description="Deploy a WAR file to the server"
+            <action id="dzide.Build"
+                    class="com.zoho.dzide.actions.BuildAction"
+                    text="Build"
+                    description="Run ANT build script"
+                    icon="AllIcons.Actions.Compile"/>
+
+            <action id="dzide.UpdateDeployment"
+                    class="com.zoho.dzide.actions.UpdateDeploymentAction"
+                    text="Update Deployment"
+                    description="Deploy a zip file to the server"
                     icon="AllIcons.Actions.Upload"/>
 
             <action id="dzide.AppLogs"
@@ -115,15 +121,7 @@
                     icon="AllIcons.Debugger.Console"/>
         </group>
 
-        <!-- Also keep Run/Debug in project view right-click menu -->
-        <action id="dzide.RunOnServer.ProjectView"
-                class="com.zoho.dzide.actions.RunOnServerAction"
-                text="Run on Tomcat Server"
-                description="Run project on Tomcat"
-                icon="AllIcons.Actions.Execute">
-            <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
-        </action>
-
+        <!-- Debug in project view right-click menu -->
         <action id="dzide.DebugOnServer.ProjectView"
                 class="com.zoho.dzide.actions.DebugOnServerAction"
                 text="Debug on Tomcat Server"

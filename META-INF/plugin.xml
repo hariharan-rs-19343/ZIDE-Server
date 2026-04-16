@@ -25,11 +25,11 @@
     <projectService serviceImplementation="com.zoho.dzide.tomcat.TomcatManager" />
     <projectService serviceImplementation="com.zoho.dzide.deploysync.ResourceSyncManager" />
     <!-- Tool window -->
-    <toolWindow id="DZIDE Tomcat" anchor="right" icon="AllIcons.Actions.Execute" factoryClass="com.zoho.dzide.toolwindow.TomcatToolWindowFactory" />
+    <toolWindow id="SAS-ZIDE" anchor="right" icon="AllIcons.Actions.Execute" factoryClass="com.zoho.dzide.toolwindow.TomcatToolWindowFactory" />
     <!-- Run configuration -->
     <configurationType implementation="com.zoho.dzide.runconfig.TomcatConfigurationType" />
     <!-- Notification group -->
-    <notificationGroup id="DZIDE Notifications" displayType="BALLOON" toolWindowId="DZIDE Tomcat" />
+    <notificationGroup id="DZIDE Notifications" displayType="BALLOON" toolWindowId="SAS-ZIDE" />
     <!-- File save listener for deploy sync -->
     <fileDocumentManagerListener implementation="com.zoho.dzide.deploysync.DeploySyncSaveListener" />
   </extensions>

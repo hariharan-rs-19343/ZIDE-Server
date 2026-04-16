@@ -22,7 +22,7 @@ class AppLogsAction : AnAction("App Logs", "Show application logs from server lo
         val console = tomcatManager.consoleView
 
         if (console == null) {
-            NotificationUtil.error(project, "Console not available. Open the DZIDE Tomcat tool window first.")
+            NotificationUtil.error(project, "Console not available. Open the SAS-ZIDE tool window first.")
             return
         }
 
@@ -46,7 +46,7 @@ class AppLogsAction : AnAction("App Logs", "Show application logs from server lo
         }
 
         // Switch to the Output tab in the tool window
-        val toolWindow = ToolWindowManager.getInstance(project).getToolWindow("DZIDE Tomcat")
+        val toolWindow = ToolWindowManager.getInstance(project).getToolWindow("SAS-ZIDE")
         toolWindow?.show {
             val outputContent = toolWindow.contentManager.findContent("Output")
             if (outputContent != null) {

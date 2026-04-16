@@ -1,0 +1,107 @@
+package com.zoho.dzide.actions
+
+import com.intellij.execution.ui.ConsoleViewContentType
+import com.intellij.openapi.actionSystem.AnAction
+import com.intellij.openapi.actionSystem.AnActionEvent
+import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.wm.ToolWindowManager
+import com.zoho.dzide.deploysync.AntResolver
+import com.zoho.dzide.tomcat.TomcatManager
+import com.zoho.dzide.util.NotificationUtil
+import com.zoho.dzide.util.ProcessUtil
+import java.nio.file.Path
+import kotlin.io.path.exists
+import kotlin.io.path.isDirectory
+import kotlin.io.path.name
+
+class BuildAction : AnAction("Build", "Run ANT build script", null) {
+
+    override fun actionPerformed(e: AnActionEvent) {
+        val project = e.project ?: return
+        val projectPath = project.basePath ?: return
+        val server = ServerActionUtil.getSelectedServer(e) ?: return
+        val tomcatManager = TomcatManager.getInstance(project)
+        val console = tomcatManager.consoleView
+
+        if (console == null) {
+            NotificationUtil.error(project, "Console not available. Open the SAS-ZIDE tool window first.")
+            return
+        }
+
+        // Switch to Output tab
+        val toolWindow = ToolWindowManager.getInstance(project).getToolWindow("SAS-ZIDE")
+        toolWindow?.show {
+            val outputContent = toolWindow.contentManager.findContent("Output")
+            if (outputContent != null) {
+                toolWindow.contentManager.setSelectedContent(outputContent)
+            }
+        }
+
+        val productName = Path.of(projectPath).name
+        val buildDir = Path.of(projectPath, "build")
+
+        if (!buildDir.exists() || !buildDir.isDirectory()) {
+            NotificationUtil.error(project, "Build directory not found: $buildDir")
+            return
+        }
+
+        // Resolve ANT
+        val antHome = AntResolver.resolveAntHome(projectPath, server.antHomeResolvedPath)
+        if (antHome == null) {
+            NotificationUtil.error(project, "ANT not found. Set ANT_HOME or place ANT in .antsetup/")
+            return
+        }
+        val antExe = AntResolver.resolveAntExecutable(antHome)
+
+        console.clear()
+        console.print("=== DZIDE Build: $productName ===\n", ConsoleViewContentType.SYSTEM_OUTPUT)
+        console.print("Build dir: $buildDir\n", ConsoleViewContentType.SYSTEM_OUTPUT)
+        console.print("ANT: $antExe\n\n", ConsoleViewContentType.SYSTEM_OUTPUT)
+
+        ApplicationManager.getApplication().executeOnPooledThread {
+            try {
+                val buildResult = ProcessUtil.executeCapturing(
+                    command = listOf(antExe),
+                    workingDir = buildDir.toString(),
+                    env = mapOf("ANT_HOME" to antHome),
+                    timeoutMs = 300_000
+                )
+
+                if (buildResult.stdout.isNotBlank()) {
+                    printToConsole(console, project, buildResult.stdout + "\n", ConsoleViewContentType.NORMAL_OUTPUT)
+                }
+                if (buildResult.stderr.isNotBlank()) {
+                    printToConsole(console, project, buildResult.stderr + "\n", ConsoleViewContentType.ERROR_OUTPUT)
+                }
+
+                if (buildResult.exitCode != 0) {
+                    printToConsole(console, project, "\nBuild FAILED (exit code ${buildResult.exitCode})\n", ConsoleViewContentType.ERROR_OUTPUT)
+                    NotificationUtil.error(project, "ANT build failed with exit code ${buildResult.exitCode}")
+                } else {
+                    printToConsole(console, project, "\n=== Build complete ===\n", ConsoleViewContentType.SYSTEM_OUTPUT)
+                    NotificationUtil.info(project, "Build completed: $productName")
+                }
+            } catch (ex: Exception) {
+                printToConsole(console, project, "Error: ${ex.message}\n", ConsoleViewContentType.ERROR_OUTPUT)
+                NotificationUtil.error(project, "Build failed: ${ex.message}")
+            }
+        }
+    }
+
+    private fun printToConsole(
+        console: com.intellij.execution.ui.ConsoleView,
+        project: com.intellij.openapi.project.Project,
+        text: String,
+        type: ConsoleViewContentType
+    ) {
+        ApplicationManager.getApplication().invokeLater {
+            if (!project.isDisposed) {
+                console.print(text, type)
+            }
+        }
+    }
+
+    override fun update(e: AnActionEvent) {
+        e.presentation.isEnabledAndVisible = e.project != null
+    }
+}
