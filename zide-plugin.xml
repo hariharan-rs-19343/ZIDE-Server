@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<plugins>
+    <plugin id="com.zoho.dzide"
+            url="https://github.com/hariharan-rs-19343/ZIDE-Server/releases/download/V0.0.1/zide-intelliJ-plugin-0.0.1.zip"
+            version="0.0.1">
+        <name>ZIDE</name>
+        <vendor>Zoho Corporation</vendor>
+        <description><![CDATA[
+        ZIDE — Tomcat server management and ZIDE integration for IntelliJ IDEA.
+        <ul>
+            <li>Add, edit, and remove Tomcat servers from the SAS-ZIDE tool window</li>
+            <li>Run and Debug servers with JPDA auto-attach support</li>
+            <li>ANT build integration and deploy-sync on save</li>
+            <li>Auto-configure from Eclipse ZIDE projects</li>
+            <li>Application log viewer and deployment updates</li>
+        </ul>
+    ]]></description>
+
+        <idea-version since-build="241" until-build="251.*"/>
+    </plugin>
+</plugins>
