@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.zoho.dzide.PathResolverTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-04-16T07:01:38" hostname="hari-19343" time="0.0">
-  <properties/>
-  <testcase name="applyProjectNamePlaceholder replaces token" classname="com.zoho.dzide.PathResolverTest" time="0.0"/>
-  <testcase name="normalizePathSlashes converts backslashes" classname="com.zoho.dzide.PathResolverTest" time="0.0"/>
-  <testcase name="stripProjectPrefix removes project name" classname="com.zoho.dzide.PathResolverTest" time="0.0"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>

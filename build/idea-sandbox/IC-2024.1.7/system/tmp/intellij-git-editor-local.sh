@@ -1,2 +1,0 @@
-#!/bin/sh
-"/Users/hari-19343/.gradle/caches/8.12/transforms/8504efc021419ff8e7911fe2f4bede4f/transformed/ideaIC-2024.1.7-aarch64/jbr/Contents/Home/bin/java" -cp "/Users/hari-19343/.gradle/caches/8.12/transforms/8504efc021419ff8e7911fe2f4bede4f/transformed/ideaIC-2024.1.7-aarch64/plugins/vcs-git/lib/git4idea-rt.jar:/Users/hari-19343/.gradle/caches/8.12/transforms/8504efc021419ff8e7911fe2f4bede4f/transformed/ideaIC-2024.1.7-aarch64/lib/externalProcess-rt.jar" git4idea.editor.GitRebaseEditorApp "$@"
