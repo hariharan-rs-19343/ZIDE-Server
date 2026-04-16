@@ -1,0 +1,71 @@
+package com.zoho.dzide.util
+
+import com.intellij.execution.configurations.GeneralCommandLine
+import com.intellij.execution.process.CapturingProcessHandler
+import com.intellij.execution.process.OSProcessHandler
+import com.intellij.execution.process.ProcessEvent
+import com.intellij.execution.process.ProcessListener
+import com.intellij.openapi.util.Key
+import java.nio.charset.StandardCharsets
+
+object ProcessUtil {
+
+    fun executeCapturing(
+        command: List<String>,
+        workingDir: String? = null,
+        env: Map<String, String> = emptyMap(),
+        timeoutMs: Int = 30_000
+    ): CapturedOutput {
+        val commandLine = GeneralCommandLine(command)
+            .withCharset(StandardCharsets.UTF_8)
+        workingDir?.let { commandLine.withWorkDirectory(it) }
+        env.forEach { (k, v) -> commandLine.withEnvironment(k, v) }
+
+        val handler = CapturingProcessHandler(commandLine)
+        val output = handler.runProcess(timeoutMs)
+        return CapturedOutput(
+            stdout = output.stdout,
+            stderr = output.stderr,
+            exitCode = output.exitCode
+        )
+    }
+
+    fun executeStreaming(
+        command: List<String>,
+        workingDir: String? = null,
+        env: Map<String, String> = emptyMap(),
+        onStdout: (String) -> Unit = {},
+        onStderr: (String) -> Unit = {},
+        onExit: (Int) -> Unit = {}
+    ): OSProcessHandler {
+        val commandLine = GeneralCommandLine(command)
+            .withCharset(StandardCharsets.UTF_8)
+        workingDir?.let { commandLine.withWorkDirectory(it) }
+        env.forEach { (k, v) -> commandLine.withEnvironment(k, v) }
+
+        val handler = OSProcessHandler(commandLine)
+        handler.addProcessListener(object : ProcessListener {
+            override fun onTextAvailable(event: ProcessEvent, outputType: Key<*>) {
+                val text = event.text?.trim() ?: return
+                if (text.isEmpty()) return
+                if (outputType.toString() == "stderr") {
+                    onStderr(text)
+                } else {
+                    onStdout(text)
+                }
+            }
+
+            override fun processTerminated(event: ProcessEvent) {
+                onExit(event.exitCode)
+            }
+        })
+        handler.startNotify()
+        return handler
+    }
+
+    data class CapturedOutput(
+        val stdout: String,
+        val stderr: String,
+        val exitCode: Int
+    )
+}

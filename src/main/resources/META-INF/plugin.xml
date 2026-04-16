@@ -1,0 +1,111 @@
+<idea-plugin>
+    <id>com.zoho.dzide</id>
+    <name>DZIDE</name>
+    <vendor>Zoho</vendor>
+    <description><![CDATA[
+        DZIDE — Tomcat server management and ZIDE auto-configuration for IntelliJ IDEA.
+        <ul>
+            <li>Add / Edit / Remove Tomcat servers from a dedicated tool window</li>
+            <li>Start / Stop servers with real-time log output</li>
+            <li>Run and Debug Java projects on Tomcat with JPDA support</li>
+            <li>Auto-configure from Eclipse ZIDE projects (.zide_resources/)</li>
+            <li>Deploy-sync on save: ANT hooks and compiled class file copy</li>
+        </ul>
+    ]]></description>
+
+    <depends>com.intellij.modules.platform</depends>
+    <depends>com.intellij.java</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <!-- Startup activity -->
+        <postStartupActivity implementation="com.zoho.dzide.DzidePlugin"/>
+
+        <!-- Persistence -->
+        <projectService serviceImplementation="com.zoho.dzide.persistence.TomcatServerState"/>
+        <projectService serviceImplementation="com.zoho.dzide.persistence.ZideCacheState"/>
+
+        <!-- Project services -->
+        <projectService serviceImplementation="com.zoho.dzide.tomcat.TomcatServerProvider"/>
+        <projectService serviceImplementation="com.zoho.dzide.tomcat.TomcatManager"/>
+        <projectService serviceImplementation="com.zoho.dzide.deploysync.ResourceSyncManager"/>
+
+        <!-- Tool window -->
+        <toolWindow id="DZIDE Tomcat"
+                    anchor="right"
+                    icon="AllIcons.Actions.Execute"
+                    factoryClass="com.zoho.dzide.toolwindow.TomcatToolWindowFactory"/>
+
+        <!-- Run configuration -->
+        <configurationType implementation="com.zoho.dzide.runconfig.TomcatConfigurationType"/>
+
+        <!-- Notification group -->
+        <notificationGroup id="DZIDE Notifications"
+                          displayType="BALLOON"
+                          toolWindowId="DZIDE Tomcat"/>
+
+        <!-- File save listener for deploy sync -->
+        <fileDocumentManagerListener
+                implementation="com.zoho.dzide.deploysync.DeploySyncSaveListener"/>
+    </extensions>
+
+    <actions>
+        <!-- Server management actions -->
+        <action id="dzide.AddServer"
+                class="com.zoho.dzide.actions.AddServerAction"
+                text="Add Tomcat Server"
+                description="Add a new Tomcat server"
+                icon="AllIcons.General.Add"/>
+
+        <action id="dzide.RefreshServers"
+                class="com.zoho.dzide.actions.RefreshServersAction"
+                text="Refresh"
+                description="Refresh server status"
+                icon="AllIcons.Actions.Refresh"/>
+
+        <action id="dzide.StartServer"
+                class="com.zoho.dzide.actions.StartServerAction"
+                text="Start Server"
+                description="Start Tomcat server"
+                icon="AllIcons.Actions.Execute"/>
+
+        <action id="dzide.StopServer"
+                class="com.zoho.dzide.actions.StopServerAction"
+                text="Stop Server"
+                description="Stop Tomcat server"
+                icon="AllIcons.Actions.Suspend"/>
+
+        <action id="dzide.RedeployWar"
+                class="com.zoho.dzide.actions.RedeployWarAction"
+                text="Redeploy WAR"
+                description="Deploy a WAR file to the server"
+                icon="AllIcons.Actions.Upload"/>
+
+        <action id="dzide.RemoveServer"
+                class="com.zoho.dzide.actions.RemoveServerAction"
+                text="Remove Server"
+                description="Remove this Tomcat server"
+                icon="AllIcons.General.Remove"/>
+
+        <action id="dzide.EditServer"
+                class="com.zoho.dzide.actions.EditServerAction"
+                text="Edit Server"
+                description="Edit Tomcat server settings"
+                icon="AllIcons.Actions.Edit"/>
+
+        <action id="dzide.RunOnServer"
+                class="com.zoho.dzide.actions.RunOnServerAction"
+                text="Run on Tomcat Server"
+                description="Run project on Tomcat"
+                icon="AllIcons.Actions.Execute">
+            <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
+        </action>
+
+        <action id="dzide.DebugOnServer"
+                class="com.zoho.dzide.actions.DebugOnServerAction"
+                text="Debug on Tomcat Server"
+                description="Debug project on Tomcat"
+                icon="AllIcons.Actions.StartDebugger">
+            <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
+        </action>
+    </actions>
+</idea-plugin>
