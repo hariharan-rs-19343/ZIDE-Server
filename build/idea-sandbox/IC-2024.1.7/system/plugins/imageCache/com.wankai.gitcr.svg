@@ -1,0 +1,23 @@
+<svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- 紫色到蓝色的渐变，代表AI/科技 -->
+    <!-- 紫色到蓝色的渐变，斜率调整为与 45 度旋转平行 -->
+    <linearGradient id="colorPurple" x1="5" y1="5" x2="35" y2="35" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#7C4DFF" />
+      <stop offset="1" stop-color="#2979FF" />
+    </linearGradient>
+    <!-- 绿色渐变同步调整 -->
+    <linearGradient id="colorGreen" x1="5" y1="5" x2="35" y2="35" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#00C853" />
+      <stop offset="1" stop-color="#64FFDA" />
+    </linearGradient>
+  </defs>
+
+  <g transform="translate(20 20) scale(1.15) rotate(45) translate(-20 -20)">
+    <!-- 合并后的 CR 字母 (紫色) -->
+    <path d="M 19 12 H 11 V 28 H 19" 
+          stroke="url(#colorGreen)" stroke-width="4.4" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M 19 28 V 12 H 27 V 20 H 19 M 23 20 L 29 28" 
+          stroke="url(#colorGreen)" stroke-width="4.4" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>
