@@ -3,6 +3,7 @@ package com.zoho.dzide.tomcat
 import com.intellij.execution.process.OSProcessHandler
 import com.intellij.execution.ui.ConsoleView
 import com.intellij.execution.ui.ConsoleViewContentType
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.project.Project
 import com.zoho.dzide.model.TomcatServer
@@ -238,67 +239,72 @@ class TomcatManager(private val project: Project) {
             return
         }
 
-        if (PortUtil.isPortInUse(server.port)) {
-            log("Server ${server.name} is already running on port ${server.port}. Stopping before restart...")
-            stopServer(server)
-            val maxWait = 15_000L
-            val interval = 500L
-            var waited = 0L
-            while (waited < maxWait && PortUtil.isPortInUse(server.port)) {
-                Thread.sleep(interval)
-                waited += interval
-            }
-            if (PortUtil.isPortInUse(server.port)) {
-                logError("Server did not stop within ${maxWait / 1000}s. Cannot start.")
-                NotificationUtil.error(project, "Server ${server.name} did not stop. Cannot restart.")
-                return
-            }
-        }
-
-        patchDeploymentConfigs(server)
-        runPreStartSetup(server)
-
-        log("======================================")
-        log("Starting Tomcat server: ${server.name}")
-        log("Script path: $script")
-        log("Port: ${server.port}")
-        log("======================================")
         NotificationUtil.info(project, "Starting Tomcat server: ${server.name}...")
 
-        val env = buildCatalinaEnvVars(server)
-        val exportChain = ShellUtil.buildExportChain(env)
-        val command = ShellUtil.buildShellCommand(
-            *exportChain.toTypedArray(),
-            "&&", "chmod", "+x", "\"$script\"",
-            "&&", "sh", "\"$script\"", "run"
-        )
+        ApplicationManager.getApplication().executeOnPooledThread {
+            if (project.isDisposed) return@executeOnPooledThread
 
-        com.zoho.dzide.util.ProcessUtil.executeStreaming(
-            command = command,
-            workingDir = server.path,
-            onStdout = { consoleView?.print(it, ConsoleViewContentType.NORMAL_OUTPUT) },
-            onStderr = { if (!shouldSuppressStderr(it)) consoleView?.print(it, ConsoleViewContentType.ERROR_OUTPUT) },
-            onExit = { exitCode ->
-                serverProcesses.remove(server.id)
-                log("Server process exited with code: $exitCode")
-                serverProvider.updateServer(server.id, mapOf("status" to "stopped"))
-                log("Server ${server.name} stopped.")
-                NotificationUtil.info(project, "Tomcat server ${server.name} stopped.")
-            }
-        ).also { handler ->
-            serverProcesses[server.id] = handler
-            // Wait for port to confirm startup
-            Thread {
-                val running = PortUtil.waitForPort(server.port, 45000)
-                if (running) {
-                    serverProvider.updateServer(server.id, mapOf("status" to "running"))
-                    log("Server ${server.name} started successfully!")
-                    NotificationUtil.info(project, "Tomcat server ${server.name} started successfully!")
-                } else {
-                    logError("Server ${server.name} failed to start - no process on port ${server.port}")
-                    NotificationUtil.error(project, "Server ${server.name} failed to start.")
+            if (PortUtil.isPortInUse(server.port)) {
+                log("Server ${server.name} is already running on port ${server.port}. Stopping before restart...")
+                stopServer(server)
+                val maxWait = 15_000L
+                val interval = 500L
+                var waited = 0L
+                while (waited < maxWait && PortUtil.isPortInUse(server.port)) {
+                    Thread.sleep(interval)
+                    waited += interval
                 }
-            }.start()
+                if (PortUtil.isPortInUse(server.port)) {
+                    logError("Server did not stop within ${maxWait / 1000}s. Cannot start.")
+                    NotificationUtil.error(project, "Server ${server.name} did not stop. Cannot restart.")
+                    return@executeOnPooledThread
+                }
+            }
+
+            patchDeploymentConfigs(server)
+            runPreStartSetup(server)
+
+            log("======================================")
+            log("Starting Tomcat server: ${server.name}")
+            log("Script path: $script")
+            log("Port: ${server.port}")
+            log("======================================")
+
+            val env = buildCatalinaEnvVars(server)
+            val exportChain = ShellUtil.buildExportChain(env)
+            val command = ShellUtil.buildShellCommand(
+                *exportChain.toTypedArray(),
+                "&&", "chmod", "+x", "\"$script\"",
+                "&&", "sh", "\"$script\"", "run"
+            )
+
+            com.zoho.dzide.util.ProcessUtil.executeStreaming(
+                command = command,
+                workingDir = server.path,
+                onStdout = { consoleView?.print(it, ConsoleViewContentType.NORMAL_OUTPUT) },
+                onStderr = { if (!shouldSuppressStderr(it)) consoleView?.print(it, ConsoleViewContentType.ERROR_OUTPUT) },
+                onExit = { exitCode ->
+                    serverProcesses.remove(server.id)
+                    log("Server process exited with code: $exitCode")
+                    serverProvider.updateServer(server.id, mapOf("status" to "stopped"))
+                    log("Server ${server.name} stopped.")
+                    NotificationUtil.info(project, "Tomcat server ${server.name} stopped.")
+                }
+            ).also { handler ->
+                serverProcesses[server.id] = handler
+                // Wait for port to confirm startup
+                Thread {
+                    val running = PortUtil.waitForPort(server.port, 45000)
+                    if (running) {
+                        serverProvider.updateServer(server.id, mapOf("status" to "running"))
+                        log("Server ${server.name} started successfully!")
+                        NotificationUtil.info(project, "Tomcat server ${server.name} started successfully!")
+                    } else {
+                        logError("Server ${server.name} failed to start - no process on port ${server.port}")
+                        NotificationUtil.error(project, "Server ${server.name} failed to start.")
+                    }
+                }.start()
+            }
         }
     }
 
@@ -318,44 +324,51 @@ class TomcatManager(private val project: Project) {
             throw IllegalStateException("Debug port $debugPort is already in use.")
         }
 
-        log("======================================")
-        log("Starting Tomcat server in debug mode: ${server.name}")
-        log("HTTP port: ${server.port}, Debug port: $debugPort")
-        log("======================================")
+        ApplicationManager.getApplication().executeOnPooledThread {
+            if (project.isDisposed) return@executeOnPooledThread
 
-        val env = buildCatalinaEnvVars(server, debugPort)
-        val exportChain = ShellUtil.buildExportChain(env)
-        val command = ShellUtil.buildShellCommand(
-            *exportChain.toTypedArray(),
-            "&&", "chmod", "+x", "\"$script\"",
-            "&&", "sh", "\"$script\"", "jpda", "run"
-        )
+            patchDeploymentConfigs(server)
+            runPreStartSetup(server)
 
-        com.zoho.dzide.util.ProcessUtil.executeStreaming(
-            command = command,
-            workingDir = server.path,
-            onStdout = { consoleView?.print(it, ConsoleViewContentType.NORMAL_OUTPUT) },
-            onStderr = { if (!shouldSuppressStderr(it)) consoleView?.print(it, ConsoleViewContentType.ERROR_OUTPUT) },
-            onExit = { _ ->
-                serverProcesses.remove(server.id)
-                serverProvider.updateServer(server.id, mapOf("status" to "stopped"))
-                log("Server ${server.name} (debug) stopped.")
-                NotificationUtil.info(project, "Tomcat server ${server.name} stopped.")
-            }
-        ).also { handler ->
-            serverProcesses[server.id] = handler
-            // Only wait for HTTP port — do NOT open a raw TCP socket to the debug port.
-            // JDWP interprets any non-handshake connection as a failed debugger attach and
-            // kills the listener, causing "handshake failed" for the real debugger.
-            Thread {
-                val httpRunning = PortUtil.waitForPort(server.port, 45000)
-                if (httpRunning) {
-                    serverProvider.updateServer(server.id, mapOf("status" to "running", "debugPort" to debugPort))
-                    log("Server ${server.name} started in debug mode. Debug port: $debugPort")
-                } else {
-                    logError("Server ${server.name} failed to start — HTTP port ${server.port} not responding.")
+            log("======================================")
+            log("Starting Tomcat server in debug mode: ${server.name}")
+            log("HTTP port: ${server.port}, Debug port: $debugPort")
+            log("======================================")
+
+            val env = buildCatalinaEnvVars(server, debugPort)
+            val exportChain = ShellUtil.buildExportChain(env)
+            val command = ShellUtil.buildShellCommand(
+                *exportChain.toTypedArray(),
+                "&&", "chmod", "+x", "\"$script\"",
+                "&&", "sh", "\"$script\"", "jpda", "run"
+            )
+
+            com.zoho.dzide.util.ProcessUtil.executeStreaming(
+                command = command,
+                workingDir = server.path,
+                onStdout = { consoleView?.print(it, ConsoleViewContentType.NORMAL_OUTPUT) },
+                onStderr = { if (!shouldSuppressStderr(it)) consoleView?.print(it, ConsoleViewContentType.ERROR_OUTPUT) },
+                onExit = { _ ->
+                    serverProcesses.remove(server.id)
+                    serverProvider.updateServer(server.id, mapOf("status" to "stopped"))
+                    log("Server ${server.name} (debug) stopped.")
+                    NotificationUtil.info(project, "Tomcat server ${server.name} stopped.")
                 }
-            }.start()
+            ).also { handler ->
+                serverProcesses[server.id] = handler
+                // Only wait for HTTP port — do NOT open a raw TCP socket to the debug port.
+                // JDWP interprets any non-handshake connection as a failed debugger attach and
+                // kills the listener, causing "handshake failed" for the real debugger.
+                Thread {
+                    val httpRunning = PortUtil.waitForPort(server.port, 45000)
+                    if (httpRunning) {
+                        serverProvider.updateServer(server.id, mapOf("status" to "running", "debugPort" to debugPort))
+                        log("Server ${server.name} started in debug mode. Debug port: $debugPort")
+                    } else {
+                        logError("Server ${server.name} failed to start — HTTP port ${server.port} not responding.")
+                    }
+                }.start()
+            }
         }
     }
 
