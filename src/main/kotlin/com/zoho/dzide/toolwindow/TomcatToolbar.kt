@@ -9,10 +9,14 @@ import com.zoho.dzide.tomcat.TomcatServerProvider
 object TomcatToolbar {
 
     fun create(project: Project, serverProvider: TomcatServerProvider, treeModel: TomcatTreeModel): ActionToolbar {
+        val am = ActionManager.getInstance()
         val group = DefaultActionGroup()
-        group.add(ActionManager.getInstance().getAction("dzide.AddServer"))
-        group.add(ActionManager.getInstance().getAction("dzide.RefreshServers"))
-        val toolbar = ActionManager.getInstance().createActionToolbar("DzideTomcatToolbar", group, true)
+        group.add(am.getAction("dzide.AddServer"))
+        group.add(am.getAction("dzide.RefreshServers"))
+        group.addSeparator()
+        group.add(am.getAction("dzide.StopServer"))
+        group.add(am.getAction("dzide.RestartServer"))
+        val toolbar = am.createActionToolbar("DzideTomcatToolbar", group, true)
         toolbar.targetComponent = null
         return toolbar
     }

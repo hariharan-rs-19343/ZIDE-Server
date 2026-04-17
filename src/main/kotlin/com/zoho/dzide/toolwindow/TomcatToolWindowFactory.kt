@@ -71,7 +71,11 @@ class TomcatToolWindowFactory : ToolWindowFactory {
         val appLogsPanel = JPanel(BorderLayout())
         appLogsPanel.add(appLogsConsole.component, BorderLayout.CENTER)
         try {
-            val appLogsActions = DefaultActionGroup(*appLogsConsole.createConsoleActions())
+            val appLogsActions = DefaultActionGroup()
+            val refreshAppLogs = ActionManager.getInstance().getAction("dzide.RefreshAppLogs")
+            if (refreshAppLogs != null) appLogsActions.add(refreshAppLogs)
+            appLogsActions.addSeparator()
+            appLogsActions.addAll(*appLogsConsole.createConsoleActions())
             val appLogsToolbar = ActionManager.getInstance().createActionToolbar("AppLogsConsole", appLogsActions, false)
             appLogsToolbar.targetComponent = appLogsConsole.component
             appLogsPanel.add(appLogsToolbar.component, BorderLayout.WEST)

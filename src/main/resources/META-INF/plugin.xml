@@ -139,6 +139,19 @@
                     icon="AllIcons.Debugger.Console"/>
         </group>
 
+        <!-- Toolbar-only actions (not in ZIDE menu) -->
+        <action id="dzide.RestartServer"
+                class="com.zoho.dzide.actions.RestartServerAction"
+                text="Restart"
+                description="Restart Tomcat server"
+                icon="AllIcons.Actions.Restart"/>
+
+        <action id="dzide.RefreshAppLogs"
+                class="com.zoho.dzide.actions.RefreshAppLogsAction"
+                text="Refresh App Logs"
+                description="Reload application log file"
+                icon="AllIcons.Actions.Refresh"/>
+
         <!-- Debug in project view right-click menu -->
         <action id="dzide.DebugOnServer.ProjectView"
                 class="com.zoho.dzide.actions.DebugOnServerAction"
