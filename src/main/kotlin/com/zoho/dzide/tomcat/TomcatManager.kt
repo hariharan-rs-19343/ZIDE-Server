@@ -75,9 +75,17 @@ class TomcatManager(private val project: Project) {
         }
     }
 
-    private fun resolveEffectiveLaunchArgs(server: TomcatServer): String {
+    private fun resolveEffectiveLaunchArgs(server: TomcatServer): String? {
+        val latestFromProperties = server.zidePropertiesPath?.let {
+            ModuleZidePropsParser.readLaunchVmArgumentsFromProperties(it)
+        }
+        if (latestFromProperties != null && latestFromProperties != server.zideLaunchVmArguments) {
+            serverProvider.updateServer(server.id, mapOf("zideLaunchVmArguments" to latestFromProperties))
+        }
+        val zideArgs = (latestFromProperties ?: server.zideLaunchVmArguments ?: "").trim()
         val manualArgs = (server.manualLaunchArgs ?: "").trim()
-        return if (manualArgs.isNotEmpty()) "$DEFAULT_VM_ARGS $manualArgs" else DEFAULT_VM_ARGS
+        val merged = listOf(zideArgs, manualArgs).filter { it.isNotEmpty() }.joinToString(" ").trim()
+        return merged.ifEmpty { null }
     }
 
     private fun buildCatalinaEnvVars(server: TomcatServer, debugPort: Int? = null): Map<String, String> {
@@ -87,8 +95,10 @@ class TomcatManager(private val project: Project) {
             env["JPDA_TRANSPORT"] = "dt_socket"
         }
         val launchArgs = resolveEffectiveLaunchArgs(server)
-        env["CATALINA_OPTS"] = launchArgs
-        log("Applying VM arguments for ${server.name}.")
+        if (launchArgs != null) {
+            env["CATALINA_OPTS"] = launchArgs
+            log("Applying launch VM arguments for ${server.name}.")
+        }
         return env
     }
 
@@ -256,8 +266,9 @@ class TomcatManager(private val project: Project) {
         NotificationUtil.info(project, "Starting Tomcat server: ${server.name}...")
 
         val env = buildCatalinaEnvVars(server)
+        val exportChain = ShellUtil.buildExportChain(env)
         val command = ShellUtil.buildShellCommand(
-            *env.map { "export ${it.key}=${ShellUtil.shellEscapeSingleQuoted(it.value)}" }.toTypedArray(),
+            *exportChain.toTypedArray(),
             "&&", "chmod", "+x", "\"$script\"",
             "&&", "sh", "\"$script\"", "run"
         )
@@ -298,26 +309,14 @@ class TomcatManager(private val project: Project) {
         }
 
         if (PortUtil.isPortInUse(server.port)) {
-            log("Server ${server.name} is already running on port ${server.port}. Stopping before debug restart...")
-            stopServer(server)
-            val maxWait = 15_000L
-            val interval = 500L
-            var waited = 0L
-            while (waited < maxWait && PortUtil.isPortInUse(server.port)) {
-                Thread.sleep(interval)
-                waited += interval
-            }
-            if (PortUtil.isPortInUse(server.port)) {
-                throw IllegalStateException("Server did not stop within ${maxWait / 1000}s. Cannot start in debug mode.")
-            }
+            log("Server ${server.name} is already running. Skipping debug start.")
+            serverProvider.updateServer(server.id, mapOf("status" to "running", "debugPort" to debugPort))
+            return
         }
 
         if (PortUtil.isPortInUse(debugPort)) {
             throw IllegalStateException("Debug port $debugPort is already in use.")
         }
-
-        patchDeploymentConfigs(server)
-        runPreStartSetup(server)
 
         log("======================================")
         log("Starting Tomcat server in debug mode: ${server.name}")
@@ -325,8 +324,9 @@ class TomcatManager(private val project: Project) {
         log("======================================")
 
         val env = buildCatalinaEnvVars(server, debugPort)
+        val exportChain = ShellUtil.buildExportChain(env)
         val command = ShellUtil.buildShellCommand(
-            *env.map { "export ${it.key}=${ShellUtil.shellEscapeSingleQuoted(it.value)}" }.toTypedArray(),
+            *exportChain.toTypedArray(),
             "&&", "chmod", "+x", "\"$script\"",
             "&&", "sh", "\"$script\"", "jpda", "run"
         )
@@ -344,15 +344,16 @@ class TomcatManager(private val project: Project) {
             }
         ).also { handler ->
             serverProcesses[server.id] = handler
-            // Wait for ports to confirm startup
+            // Only wait for HTTP port — do NOT open a raw TCP socket to the debug port.
+            // JDWP interprets any non-handshake connection as a failed debugger attach and
+            // kills the listener, causing "handshake failed" for the real debugger.
             Thread {
                 val httpRunning = PortUtil.waitForPort(server.port, 45000)
-                val debugRunning = PortUtil.waitForPort(debugPort, 45000)
-                if (httpRunning && debugRunning) {
+                if (httpRunning) {
                     serverProvider.updateServer(server.id, mapOf("status" to "running", "debugPort" to debugPort))
-                    log("Server ${server.name} started in debug mode.")
+                    log("Server ${server.name} started in debug mode. Debug port: $debugPort")
                 } else {
-                    logError("Server failed to start in debug mode. HTTP: $httpRunning, debug ($debugPort): $debugRunning")
+                    logError("Server ${server.name} failed to start — HTTP port ${server.port} not responding.")
                 }
             }.start()
         }

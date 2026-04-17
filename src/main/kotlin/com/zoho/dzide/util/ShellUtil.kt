@@ -24,6 +24,18 @@ object ShellUtil {
         }
     }
 
+    /**
+     * Builds a chain of export statements separated by && for use in shell commands.
+     */
+    fun buildExportChain(env: Map<String, String>): List<String> {
+        val parts = mutableListOf<String>()
+        env.entries.forEachIndexed { index, entry ->
+            if (index > 0) parts.add("&&")
+            parts.add("export ${entry.key}=${shellEscapeSingleQuoted(entry.value)}")
+        }
+        return parts
+    }
+
     fun shellEscapeSingleQuoted(value: String): String {
         return "'${value.replace("'", "'\"'\"'")}'"
     }

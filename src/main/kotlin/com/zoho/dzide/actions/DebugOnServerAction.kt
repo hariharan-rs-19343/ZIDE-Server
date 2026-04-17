@@ -20,21 +20,23 @@ class DebugOnServerAction : AnAction("Debug", "Start server in debug mode and at
         try {
             tomcatManager.startServerInDebug(server, debugPort)
 
-            // Wait for the debug port to be ready before attaching
-            NotificationUtil.info(project, "Waiting for debug port $debugPort to be ready...")
+            // Wait for the HTTP port (proves server is up) — do NOT probe the debug port
+            // with a raw TCP socket, as JDWP interprets it as a debugger and kills the
+            // listener on handshake failure.
+            NotificationUtil.info(project, "Waiting for server to start before attaching debugger...")
             ApplicationManager.getApplication().executeOnPooledThread {
-                val ready = PortUtil.waitForPort(debugPort, 60000)
+                val ready = PortUtil.waitForPort(server.port, 60000)
                 if (!ready) {
                     ApplicationManager.getApplication().invokeLater {
                         if (!project.isDisposed) {
-                            NotificationUtil.error(project, "Debug port $debugPort did not become available. Server may have failed to start.")
+                            NotificationUtil.error(project, "Server HTTP port ${server.port} did not become available. Server may have failed to start.")
                         }
                     }
                     return@executeOnPooledThread
                 }
 
-                // Small extra delay to let JPDA fully initialize after port opens
-                Thread.sleep(3000)
+                // Give JPDA a moment to fully initialize after server is up
+                Thread.sleep(2000)
 
                 ApplicationManager.getApplication().invokeLater {
                     if (project.isDisposed) return@invokeLater
