@@ -21,69 +21,65 @@ class BuildAction : AnAction("Build", "Run ANT build script", null) {
         val projectPath = project.basePath ?: return
         val server = ServerActionUtil.getSelectedServer(e) ?: return
         val tomcatManager = TomcatManager.getInstance(project)
-        val console = tomcatManager.consoleView
 
-        if (console == null) {
-            NotificationUtil.error(project, "Console not available. Open the SAS-ZIDE tool window first.")
-            return
-        }
+        tomcatManager.ensureToolWindow {
+            val console = tomcatManager.consoleView ?: return@ensureToolWindow
 
-        // Switch to Output tab
-        val toolWindow = ToolWindowManager.getInstance(project).getToolWindow("SAS-ZIDE")
-        toolWindow?.show {
-            val outputContent = toolWindow.contentManager.findContent("Output")
+            // Switch to Output tab
+            val toolWindow = ToolWindowManager.getInstance(project).getToolWindow("SAS-ZIDE")
+            val outputContent = toolWindow?.contentManager?.findContent("Output")
             if (outputContent != null) {
                 toolWindow.contentManager.setSelectedContent(outputContent)
             }
-        }
 
-        val productName = Path.of(projectPath).name
-        val buildDir = Path.of(projectPath, "build")
+            val productName = Path.of(projectPath).name
+            val buildDir = Path.of(projectPath, "build")
 
-        if (!buildDir.exists() || !buildDir.isDirectory()) {
-            NotificationUtil.error(project, "Build directory not found: $buildDir")
-            return
-        }
+            if (!buildDir.exists() || !buildDir.isDirectory()) {
+                NotificationUtil.error(project, "Build directory not found: $buildDir")
+                return@ensureToolWindow
+            }
 
-        // Resolve ANT
-        val antHome = AntResolver.resolveAntHome(projectPath, server.antHomeResolvedPath)
-        if (antHome == null) {
-            NotificationUtil.error(project, "ANT not found. Set ANT_HOME or place ANT in .antsetup/")
-            return
-        }
-        val antExe = AntResolver.resolveAntExecutable(antHome)
+            // Resolve ANT
+            val antHome = AntResolver.resolveAntHome(projectPath, server.antHomeResolvedPath)
+            if (antHome == null) {
+                NotificationUtil.error(project, "ANT not found. Set ANT_HOME in ~/.zshrc")
+                return@ensureToolWindow
+            }
+            val antExe = AntResolver.resolveAntExecutable(antHome)
 
-        console.clear()
-        console.print("=== DZIDE Build: $productName ===\n", ConsoleViewContentType.SYSTEM_OUTPUT)
-        console.print("Build dir: $buildDir\n", ConsoleViewContentType.SYSTEM_OUTPUT)
-        console.print("ANT: $antExe\n\n", ConsoleViewContentType.SYSTEM_OUTPUT)
+            console.clear()
+            console.print("=== DZIDE Build: $productName ===\n", ConsoleViewContentType.SYSTEM_OUTPUT)
+            console.print("Build dir: $buildDir\n", ConsoleViewContentType.SYSTEM_OUTPUT)
+            console.print("ANT: $antExe\n\n", ConsoleViewContentType.SYSTEM_OUTPUT)
 
-        ApplicationManager.getApplication().executeOnPooledThread {
-            try {
-                val handler = ProcessUtil.executeStreaming(
-                    command = listOf(antExe),
-                    workingDir = buildDir.toString(),
-                    env = mapOf("ANT_HOME" to antHome),
-                    onStdout = { line ->
-                        printToConsole(console, project, line + "\n", ConsoleViewContentType.NORMAL_OUTPUT)
-                    },
-                    onStderr = { line ->
-                        printToConsole(console, project, line + "\n", ConsoleViewContentType.ERROR_OUTPUT)
-                    },
-                    onExit = { exitCode ->
-                        if (exitCode != 0) {
-                            printToConsole(console, project, "\nBuild FAILED (exit code $exitCode)\n", ConsoleViewContentType.ERROR_OUTPUT)
-                            NotificationUtil.error(project, "ANT build failed with exit code $exitCode")
-                        } else {
-                            printToConsole(console, project, "\n=== Build complete ===\n", ConsoleViewContentType.SYSTEM_OUTPUT)
-                            NotificationUtil.info(project, "Build completed: $productName")
+            ApplicationManager.getApplication().executeOnPooledThread {
+                try {
+                    val handler = ProcessUtil.executeStreaming(
+                        command = listOf(antExe),
+                        workingDir = buildDir.toString(),
+                        env = mapOf("ANT_HOME" to antHome),
+                        onStdout = { line ->
+                            printToConsole(console, project, line + "\n", ConsoleViewContentType.NORMAL_OUTPUT)
+                        },
+                        onStderr = { line ->
+                            printToConsole(console, project, line + "\n", ConsoleViewContentType.ERROR_OUTPUT)
+                        },
+                        onExit = { exitCode ->
+                            if (exitCode != 0) {
+                                printToConsole(console, project, "\nBuild FAILED (exit code $exitCode)\n", ConsoleViewContentType.ERROR_OUTPUT)
+                                NotificationUtil.error(project, "ANT build failed with exit code $exitCode")
+                            } else {
+                                printToConsole(console, project, "\n=== Build complete ===\n", ConsoleViewContentType.SYSTEM_OUTPUT)
+                                NotificationUtil.info(project, "Build completed: $productName")
+                            }
                         }
-                    }
-                )
-                handler.waitFor()
-            } catch (ex: Exception) {
-                printToConsole(console, project, "Error: ${ex.message}\n", ConsoleViewContentType.ERROR_OUTPUT)
-                NotificationUtil.error(project, "Build failed: ${ex.message}")
+                    )
+                    handler.waitFor()
+                } catch (ex: Exception) {
+                    printToConsole(console, project, "Error: ${ex.message}\n", ConsoleViewContentType.ERROR_OUTPUT)
+                    NotificationUtil.error(project, "Build failed: ${ex.message}")
+                }
             }
         }
     }

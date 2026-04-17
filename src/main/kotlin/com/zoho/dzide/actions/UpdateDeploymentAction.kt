@@ -31,12 +31,6 @@ class UpdateDeploymentAction : AnAction("Update Deployment", "Deploy a zip file 
         val project = e.project ?: return
         val server = ServerActionUtil.getSelectedServer(e) ?: return
         val tomcatManager = TomcatManager.getInstance(project)
-        val console = tomcatManager.consoleView
-
-        if (console == null) {
-            NotificationUtil.error(project, "Console not available. Open the SAS-ZIDE tool window first.")
-            return
-        }
 
         // Let user choose a zip file
         val descriptor = FileChooserDescriptor(true, false, true, true, false, false)
@@ -82,21 +76,22 @@ class UpdateDeploymentAction : AnAction("Update Deployment", "Deploy a zip file 
         val dbName = zideProps["ZIDE.DB_NAME"] ?: parentService.lowercase()
         val dbPass = zideProps["ZIDE.DB_PASS"] ?: ""
 
-        // Switch to Output tab
-        val toolWindow = ToolWindowManager.getInstance(project).getToolWindow("SAS-ZIDE")
-        toolWindow?.show {
-            val outputContent = toolWindow.contentManager.findContent("Output")
+        // Ensure tool window is open and consoles are available
+        tomcatManager.ensureToolWindow {
+            val console = tomcatManager.consoleView ?: return@ensureToolWindow
+
+            val toolWindow = ToolWindowManager.getInstance(project).getToolWindow("SAS-ZIDE")
+            val outputContent = toolWindow?.contentManager?.findContent("Output")
             if (outputContent != null) {
                 toolWindow.contentManager.setSelectedContent(outputContent)
             }
-        }
 
-        console.clear()
-        printToConsole(console, project, "=== Update Deployment ===\n", ConsoleViewContentType.SYSTEM_OUTPUT)
-        printToConsole(console, project, "Zip file: $zipPath\n", ConsoleViewContentType.SYSTEM_OUTPUT)
-        printToConsole(console, project, "Deploy to: $deployDir\n", ConsoleViewContentType.SYSTEM_OUTPUT)
-        printToConsole(console, project, "Repository: $repositoryPath\n", ConsoleViewContentType.SYSTEM_OUTPUT)
-        printToConsole(console, project, "Service: $parentService\n\n", ConsoleViewContentType.SYSTEM_OUTPUT)
+            console.clear()
+            printToConsole(console, project, "=== Update Deployment ===\n", ConsoleViewContentType.SYSTEM_OUTPUT)
+            printToConsole(console, project, "Zip file: $zipPath\n", ConsoleViewContentType.SYSTEM_OUTPUT)
+            printToConsole(console, project, "Deploy to: $deployDir\n", ConsoleViewContentType.SYSTEM_OUTPUT)
+            printToConsole(console, project, "Repository: $repositoryPath\n", ConsoleViewContentType.SYSTEM_OUTPUT)
+            printToConsole(console, project, "Service: $parentService\n\n", ConsoleViewContentType.SYSTEM_OUTPUT)
 
         ApplicationManager.getApplication().executeOnPooledThread {
             try {
@@ -254,6 +249,7 @@ class UpdateDeploymentAction : AnAction("Update Deployment", "Deploy a zip file 
                 printToConsole(console, project, "Error: ${ex.message}\n", ConsoleViewContentType.ERROR_OUTPUT)
                 NotificationUtil.error(project, "Update deployment failed: ${ex.message}")
             }
+        }
         }
     }
 

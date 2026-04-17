@@ -2,6 +2,8 @@ package com.zoho.dzide.toolwindow
 
 import com.intellij.execution.filters.TextConsoleBuilderFactory
 import com.intellij.execution.ui.ConsoleView
+import com.intellij.openapi.actionSystem.ActionManager
+import com.intellij.openapi.actionSystem.DefaultActionGroup
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.wm.ToolWindow
 import com.intellij.openapi.wm.ToolWindowFactory
@@ -38,24 +40,45 @@ class TomcatToolWindowFactory : ToolWindowFactory {
 
         val contentFactory = ContentFactory.getInstance()
         val treeContent = contentFactory.createContent(treePanel, "Servers", false)
+        treeContent.isCloseable = false
         toolWindow.contentManager.addContent(treeContent)
 
-        // Create console panel
+        // Create console panel with toolbar (includes Clear button)
         val console: ConsoleView = TextConsoleBuilderFactory.getInstance()
             .createBuilder(project)
             .console
         tomcatManager.consoleView = console
 
-        val consoleContent = contentFactory.createContent(console.component, "Output", false)
+        val consolePanel = JPanel(BorderLayout())
+        consolePanel.add(console.component, BorderLayout.CENTER)
+        try {
+            val consoleActions = DefaultActionGroup(*console.createConsoleActions())
+            val consoleToolbar = ActionManager.getInstance().createActionToolbar("OutputConsole", consoleActions, false)
+            consoleToolbar.targetComponent = console.component
+            consolePanel.add(consoleToolbar.component, BorderLayout.WEST)
+        } catch (_: Exception) { }
+
+        val consoleContent = contentFactory.createContent(consolePanel, "Output", false)
+        consoleContent.isCloseable = false
         toolWindow.contentManager.addContent(consoleContent)
 
-        // Create App Logs console panel
+        // Create App Logs console panel with toolbar (includes Clear button)
         val appLogsConsole: ConsoleView = TextConsoleBuilderFactory.getInstance()
             .createBuilder(project)
             .console
         tomcatManager.appLogsConsoleView = appLogsConsole
 
-        val appLogsContent = contentFactory.createContent(appLogsConsole.component, "App Logs", false)
+        val appLogsPanel = JPanel(BorderLayout())
+        appLogsPanel.add(appLogsConsole.component, BorderLayout.CENTER)
+        try {
+            val appLogsActions = DefaultActionGroup(*appLogsConsole.createConsoleActions())
+            val appLogsToolbar = ActionManager.getInstance().createActionToolbar("AppLogsConsole", appLogsActions, false)
+            appLogsToolbar.targetComponent = appLogsConsole.component
+            appLogsPanel.add(appLogsToolbar.component, BorderLayout.WEST)
+        } catch (_: Exception) { }
+
+        val appLogsContent = contentFactory.createContent(appLogsPanel, "App Logs", false)
+        appLogsContent.isCloseable = false
         toolWindow.contentManager.addContent(appLogsContent)
 
         // Listen for changes

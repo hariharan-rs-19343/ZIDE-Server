@@ -19,65 +19,60 @@ class AppLogsAction : AnAction("App Logs", "Show application logs from server lo
         val project = e.project ?: return
         val server = ServerActionUtil.getSelectedServer(e) ?: return
         val tomcatManager = TomcatManager.getInstance(project)
-        val console = tomcatManager.appLogsConsoleView
 
-        if (console == null) {
-            NotificationUtil.error(project, "App Logs console not available. Open the SAS-ZIDE tool window first.")
-            return
-        }
+        tomcatManager.ensureToolWindow {
+            val console = tomcatManager.appLogsConsoleView ?: return@ensureToolWindow
 
-        val logsDir = Path.of(server.path).parent.resolve("logs")
-        if (!logsDir.exists()) {
-            NotificationUtil.error(project, "Logs directory not found: $logsDir")
-            return
-        }
-
-        // Find the latest *.application0.txt file
-        val logFile = Files.list(logsDir).use { stream ->
-            stream.filter { it.isRegularFile() && it.name.endsWith("application0.txt") }
-                .sorted(Comparator.comparingLong<Path> { Files.getLastModifiedTime(it).toMillis() }.reversed())
-                .findFirst()
-                .orElse(null)
-        }
-
-        if (logFile == null) {
-            NotificationUtil.error(project, "No *application0.txt log files found in $logsDir")
-            return
-        }
-
-        // Switch to the App Logs tab in the tool window
-        val toolWindow = ToolWindowManager.getInstance(project).getToolWindow("SAS-ZIDE")
-        toolWindow?.show {
-            val appLogsContent = toolWindow.contentManager.findContent("App Logs")
+            val toolWindow = ToolWindowManager.getInstance(project).getToolWindow("SAS-ZIDE")
+            val appLogsContent = toolWindow?.contentManager?.findContent("App Logs")
             if (appLogsContent != null) {
                 toolWindow.contentManager.setSelectedContent(appLogsContent)
             }
-        }
 
-        console.clear()
-        console.print("=== Log file: $logFile ===\n\n", ConsoleViewContentType.SYSTEM_OUTPUT)
+            val logsDir = Path.of(server.path).parent.resolve("logs")
+            if (!logsDir.exists()) {
+                NotificationUtil.error(project, "Logs directory not found: $logsDir")
+                return@ensureToolWindow
+            }
 
-        // Read and display the entire file
-        ApplicationManager.getApplication().executeOnPooledThread {
-            try {
-                Files.readAllLines(logFile, Charsets.UTF_8).forEach { line ->
-                    val contentType = when {
-                        line.contains("ERROR") || line.contains("SEVERE") ->
-                            ConsoleViewContentType.ERROR_OUTPUT
-                        line.contains("WARN") ->
-                            ConsoleViewContentType.LOG_WARNING_OUTPUT
-                        else -> ConsoleViewContentType.NORMAL_OUTPUT
-                    }
-                    ApplicationManager.getApplication().invokeLater {
-                        if (!project.isDisposed) {
-                            console.print("$line\n", contentType)
+            // Find the latest *.application0.txt file
+            val logFile = Files.list(logsDir).use { stream ->
+                stream.filter { it.isRegularFile() && it.name.endsWith("application0.txt") }
+                    .sorted(Comparator.comparingLong<Path> { Files.getLastModifiedTime(it).toMillis() }.reversed())
+                    .findFirst()
+                    .orElse(null)
+            }
+
+            if (logFile == null) {
+                NotificationUtil.error(project, "No *application0.txt log files found in $logsDir")
+                return@ensureToolWindow
+            }
+
+            console.clear()
+            console.print("=== Log file: $logFile ===\n\n", ConsoleViewContentType.SYSTEM_OUTPUT)
+
+            // Read and display the entire file
+            ApplicationManager.getApplication().executeOnPooledThread {
+                try {
+                    Files.readAllLines(logFile, Charsets.UTF_8).forEach { line ->
+                        val contentType = when {
+                            line.contains("ERROR") || line.contains("SEVERE") ->
+                                ConsoleViewContentType.ERROR_OUTPUT
+                            line.contains("WARN") ->
+                                ConsoleViewContentType.LOG_WARNING_OUTPUT
+                            else -> ConsoleViewContentType.NORMAL_OUTPUT
+                        }
+                        ApplicationManager.getApplication().invokeLater {
+                            if (!project.isDisposed) {
+                                console.print("$line\n", contentType)
+                            }
                         }
                     }
-                }
-            } catch (ex: Exception) {
-                ApplicationManager.getApplication().invokeLater {
-                    if (!project.isDisposed) {
-                        console.print("Error reading log file: ${ex.message}\n", ConsoleViewContentType.ERROR_OUTPUT)
+                } catch (ex: Exception) {
+                    ApplicationManager.getApplication().invokeLater {
+                        if (!project.isDisposed) {
+                            console.print("Error reading log file: ${ex.message}\n", ConsoleViewContentType.ERROR_OUTPUT)
+                        }
                     }
                 }
             }

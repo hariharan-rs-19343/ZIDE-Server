@@ -46,7 +46,7 @@ object ProcessUtil {
         val handler = OSProcessHandler(commandLine)
         handler.addProcessListener(object : ProcessListener {
             override fun onTextAvailable(event: ProcessEvent, outputType: Key<*>) {
-                val text = event.text?.trim() ?: return
+                val text = event.text ?: return
                 if (text.isEmpty()) return
                 if (outputType.toString() == "stderr") {
                     onStderr(text)

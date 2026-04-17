@@ -24,6 +24,17 @@ class TomcatManager(private val project: Project) {
     private val serverProvider: TomcatServerProvider
         get() = TomcatServerProvider.getInstance(project)
 
+    fun ensureToolWindow(callback: () -> Unit) {
+        val toolWindow = com.intellij.openapi.wm.ToolWindowManager.getInstance(project).getToolWindow("SAS-ZIDE")
+        if (toolWindow == null) {
+            com.zoho.dzide.util.NotificationUtil.error(project, "SAS-ZIDE tool window not found.")
+            return
+        }
+        toolWindow.activate {
+            callback()
+        }
+    }
+
     private fun log(message: String) {
         val timestamped = "[${java.time.LocalTime.now().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss"))}] $message\n"
         consoleView?.print(timestamped, ConsoleViewContentType.NORMAL_OUTPUT)
@@ -32,6 +43,18 @@ class TomcatManager(private val project: Project) {
     private fun logError(message: String) {
         val timestamped = "[${java.time.LocalTime.now().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss"))}] $message\n"
         consoleView?.print(timestamped, ConsoleViewContentType.ERROR_OUTPUT)
+    }
+
+    private val suppressedStderrPatterns = listOf(
+        "too many arguments",
+        "Picked up JDK_JAVA_OPTIONS",
+        "validation was turned on but",
+        "Document root element",
+        "Document is invalid: no grammar found"
+    )
+
+    private fun shouldSuppressStderr(line: String): Boolean {
+        return suppressedStderrPatterns.any { line.contains(it, ignoreCase = true) }
     }
 
     fun normalizeContextPath(contextPath: String?): String {
@@ -51,16 +74,8 @@ class TomcatManager(private val project: Project) {
     }
 
     private fun resolveEffectiveLaunchArgs(server: TomcatServer): String {
-        val latestFromProperties = server.zidePropertiesPath?.let {
-            ModuleZidePropsParser.readLaunchVmArgumentsFromProperties(it)
-        }
-        if (latestFromProperties != null && latestFromProperties != server.zideLaunchVmArguments) {
-            serverProvider.updateServer(server.id, mapOf("zideLaunchVmArguments" to latestFromProperties))
-        }
-        val zideArgs = (latestFromProperties ?: server.zideLaunchVmArguments ?: "").trim()
         val manualArgs = (server.manualLaunchArgs ?: "").trim()
-        val extra = listOf(zideArgs, manualArgs).filter { it.isNotEmpty() }.joinToString(" ").trim()
-        return if (extra.isNotEmpty()) "$DEFAULT_VM_ARGS $extra" else DEFAULT_VM_ARGS
+        return if (manualArgs.isNotEmpty()) "$DEFAULT_VM_ARGS $manualArgs" else DEFAULT_VM_ARGS
     }
 
     private fun buildCatalinaEnvVars(server: TomcatServer, debugPort: Int? = null): Map<String, String> {
@@ -106,8 +121,8 @@ class TomcatManager(private val project: Project) {
         com.zoho.dzide.util.ProcessUtil.executeStreaming(
             command = command,
             workingDir = server.path,
-            onStdout = { log(it) },
-            onStderr = { logError("STDERR: $it") },
+            onStdout = { consoleView?.print(it, ConsoleViewContentType.NORMAL_OUTPUT) },
+            onStderr = { if (!shouldSuppressStderr(it)) consoleView?.print(it, ConsoleViewContentType.ERROR_OUTPUT) },
             onExit = { exitCode ->
                 serverProcesses.remove(server.id)
                 log("Server process exited with code: $exitCode")
@@ -163,8 +178,8 @@ class TomcatManager(private val project: Project) {
         com.zoho.dzide.util.ProcessUtil.executeStreaming(
             command = command,
             workingDir = server.path,
-            onStdout = { log(it) },
-            onStderr = { logError("STDERR: $it") },
+            onStdout = { consoleView?.print(it, ConsoleViewContentType.NORMAL_OUTPUT) },
+            onStderr = { if (!shouldSuppressStderr(it)) consoleView?.print(it, ConsoleViewContentType.ERROR_OUTPUT) },
             onExit = { _ ->
                 serverProcesses.remove(server.id)
                 serverProvider.updateServer(server.id, mapOf("status" to "stopped"))
