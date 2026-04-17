@@ -6,10 +6,13 @@ Tomcat server management and ZIDE integration for IntelliJ IDEA.
 
 - **Server Management** — Add, edit, remove Tomcat servers from the SAS-ZIDE tool window
 - **Run / Debug** — Start Tomcat in foreground mode (`catalina.sh run`) or debug mode with JPDA auto-attach
-- **Stop** — Gracefully stop the attached Tomcat process
+- **Restart** — Restart a running server with a single click from the toolbar
+- **Stop** — Gracefully stop the attached Tomcat process with multi-level fallback
+- **Deployment Config Patching** — Automatically patches server.xml, web.xml, persistence, and security configs before server start
+- **Pre-Start Setup** — Runs postzidedeploy.sh and syncs server.xml files between directories before launch
 - **Build** — Run ANT build scripts from the project directory
-- **Update Deployment** — Deploy a zip file to the ZIDE deployment folder
-- **App Logs** — View application logs in a dedicated tool window tab
+- **Update Deployment** — Deploy a zip file to the ZIDE deployment folder with full pipeline (extract, ANT hooks, config patching)
+- **App Logs** — View application logs in a dedicated tool window tab with color-coded ERROR/WARN highlighting
 - **Deploy Sync on Save** — Automatically copy compiled classes, run ANT hooks, and sync resources on file save
 - **ZIDE Auto-Configuration** — Detect and import Eclipse ZIDE project settings (`.zide_resources/`)
 
@@ -41,7 +44,22 @@ This launches a sandboxed IntelliJ IDEA instance with the plugin installed.
 |-----|-------------|
 | **Servers** | Tree view of configured Tomcat servers with status indicators |
 | **Output** | Console output from server start/stop and build commands |
-| **App Logs** | Application log viewer (`*application0.txt`) |
+| **App Logs** | Application log viewer (`*application0.txt`) with refresh button |
+
+## Toolbar Buttons
+
+### Servers Tab
+| Button | Description |
+|--------|-------------|
+| Add | Add a new Tomcat server |
+| Refresh | Refresh all server statuses |
+| Stop | Stop the selected running server |
+| Restart | Restart the selected server (stop + start) |
+
+### App Logs Tab
+| Button | Description |
+|--------|-------------|
+| Refresh | Reload the latest application log file |
 
 ## ZIDE Menu
 

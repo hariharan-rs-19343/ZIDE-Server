@@ -14,6 +14,20 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <b>0.0.2</b>
+        <ul>
+            <li>Deployment config patching — automatically patches server.xml, web.xml, persistence-configurations.xml, and security-properties.xml before server start</li>
+            <li>Pre-start setup — runs postzidedeploy.sh and syncs server.xml files between Servers config and Tomcat directories</li>
+            <li>Toolbar buttons — Stop and Restart on the Servers tab, Refresh on the App Logs tab</li>
+            <li>Restart server action — stops, waits for port release, then starts again</li>
+            <li>Auto-stop before start — if server is already running, stops it first before starting/debugging</li>
+            <li>Debug fix — no longer probes debug port with raw TCP (was corrupting JDWP handshake)</li>
+            <li>Debug fix — shell export commands now properly separated with &amp;&amp;</li>
+            <li>VM arguments loaded from Zide.properties instead of hardcoded defaults</li>
+            <li>CATALINA_OPTS only set when launch args are configured</li>
+            <li>Regex.escapeReplacement fix for security-properties.xml patching</li>
+            <li>Suppressed noisy Tomcat stderr messages in Output console</li>
+        </ul>
         <b>0.0.1 — Initial Release</b>
         <ul>
             <li>SAS-ZIDE tool window with Servers, Output, and App Logs tabs</li>
