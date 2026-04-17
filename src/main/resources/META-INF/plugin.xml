@@ -112,19 +112,25 @@
                     class="com.zoho.dzide.actions.StartServerAction"
                     text="Run"
                     description="Start Tomcat server"
-                    icon="AllIcons.Actions.Execute"/>
+                    icon="AllIcons.Actions.Execute">
+                <keyboard-shortcut keymap="$default" first-keystroke="control shift I"/>
+            </action>
 
             <action id="dzide.DebugOnServer"
                     class="com.zoho.dzide.actions.DebugOnServerAction"
                     text="Debug"
                     description="Debug project on Tomcat"
-                    icon="AllIcons.Actions.StartDebugger"/>
+                    icon="AllIcons.Actions.StartDebugger">
+                <keyboard-shortcut keymap="$default" first-keystroke="control shift D"/>
+            </action>
 
             <action id="dzide.StopServer"
                     class="com.zoho.dzide.actions.StopServerAction"
                     text="Stop"
                     description="Stop Tomcat server"
-                    icon="AllIcons.Actions.Suspend"/>
+                    icon="AllIcons.Actions.Suspend">
+                <keyboard-shortcut keymap="$default" first-keystroke="control shift PERIOD"/>
+            </action>
 
             <action id="dzide.RefreshServers"
                     class="com.zoho.dzide.actions.RefreshServersAction"
@@ -138,7 +144,9 @@
                     class="com.zoho.dzide.actions.BuildAction"
                     text="Build"
                     description="Run ANT build script"
-                    icon="AllIcons.Actions.Compile"/>
+                    icon="AllIcons.Actions.Compile">
+                <keyboard-shortcut keymap="$default" first-keystroke="control shift B"/>
+            </action>
 
             <action id="dzide.UpdateDeployment"
                     class="com.zoho.dzide.actions.UpdateDeploymentAction"
