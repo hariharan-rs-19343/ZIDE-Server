@@ -22,6 +22,7 @@ import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 import java.util.Properties
 import kotlin.io.path.exists
+import kotlin.io.path.extension
 import kotlin.io.path.name
 
 class UpdateDeploymentAction : AnAction("Update Deployment", "Deploy a zip file to the server", null) {
@@ -115,7 +116,7 @@ class UpdateDeploymentAction : AnAction("Update Deployment", "Deploy a zip file 
                     }
                 }
 
-                // Step 2: Copy zip to deployment folder and extract
+                // Step 2: Copy zip to deployment folder
                 Files.createDirectories(deployDir)
                 val destZip = deployDir.resolve(zipPath.name)
 
@@ -123,6 +124,7 @@ class UpdateDeploymentAction : AnAction("Update Deployment", "Deploy a zip file 
                 Files.copy(zipPath, destZip, StandardCopyOption.REPLACE_EXISTING)
                 printToConsole(console, project, "Copied successfully.\n\n", ConsoleViewContentType.SYSTEM_OUTPUT)
 
+                // Step 3: Extract zip in deployment folder
                 printToConsole(console, project, "[2/5] Extracting ${zipPath.name}...\n", ConsoleViewContentType.SYSTEM_OUTPUT)
                 val unzipResult = ProcessUtil.executeCapturing(
                     command = listOf("unzip", "-o", destZip.toString(), "-d", deployDir.toString()),
@@ -142,11 +144,51 @@ class UpdateDeploymentAction : AnAction("Update Deployment", "Deploy a zip file 
                 }
                 printToConsole(console, project, "Extracted successfully.\n\n", ConsoleViewContentType.SYSTEM_OUTPUT)
 
+                // Step 4: Unzip ROOT.war as product_name in webapps
+                val webappsDir = deployDir.resolve("AdventNet").resolve("Sas").resolve("tomcat").resolve("webapps")
+                val rootWar = webappsDir.resolve("ROOT.war")
+                if (!rootWar.exists()) {
+                    printToConsole(console, project, "ERROR: ROOT.war not found at $rootWar\n", ConsoleViewContentType.ERROR_OUTPUT)
+                    NotificationUtil.error(project, "ROOT.war not found in webapps.")
+                    return@executeOnPooledThread
+                }
+
+                val productDir = webappsDir.resolve(parentService)
+                Files.createDirectories(productDir)
+                printToConsole(console, project, "[3/5] Unzipping ROOT.war as $parentService...\n", ConsoleViewContentType.SYSTEM_OUTPUT)
+                val warUnzipResult = ProcessUtil.executeCapturing(
+                    command = listOf("unzip", "-o", rootWar.toString(), "-d", productDir.toString()),
+                    workingDir = webappsDir.toString(),
+                    timeoutMs = 120_000
+                )
+                if (warUnzipResult.stdout.isNotBlank()) {
+                    printToConsole(console, project, warUnzipResult.stdout + "\n", ConsoleViewContentType.NORMAL_OUTPUT)
+                }
+                if (warUnzipResult.stderr.isNotBlank()) {
+                    printToConsole(console, project, warUnzipResult.stderr + "\n", ConsoleViewContentType.ERROR_OUTPUT)
+                }
+                if (warUnzipResult.exitCode != 0) {
+                    printToConsole(console, project, "\nWAR extract FAILED (exit code ${warUnzipResult.exitCode})\n", ConsoleViewContentType.ERROR_OUTPUT)
+                    NotificationUtil.error(project, "ROOT.war extraction failed.")
+                    return@executeOnPooledThread
+                }
+                printToConsole(console, project, "ROOT.war extracted to $parentService/\n\n", ConsoleViewContentType.SYSTEM_OUTPUT)
+
+                // Step 5: Delete all *.war files from webapps
+                printToConsole(console, project, "[4/5] Deleting *.war files from webapps...\n", ConsoleViewContentType.SYSTEM_OUTPUT)
+                Files.list(webappsDir).use { stream ->
+                    stream.filter { it.extension == "war" }.forEach { warFile ->
+                        Files.delete(warFile)
+                        printToConsole(console, project, "Deleted: ${warFile.name}\n", ConsoleViewContentType.NORMAL_OUTPUT)
+                    }
+                }
+                printToConsole(console, project, "WAR files cleaned up.\n\n", ConsoleViewContentType.SYSTEM_OUTPUT)
+
                 // Resolve ANT
-                val antHome = AntResolver.resolveAntHome(repositoryPath, server.antHomeResolvedPath)
+                val antHome = AntResolver.resolveAntHome(projectPath!!, server.antHomeResolvedPath)
                 if (antHome == null) {
-                    printToConsole(console, project, "ERROR: ANT home not found. Cannot run hooks.\n", ConsoleViewContentType.ERROR_OUTPUT)
-                    NotificationUtil.error(project, "ANT home not resolved. Hooks skipped.")
+                    printToConsole(console, project, "ERROR: ANT not found. Set ANT_HOME in ~/.zshrc\n", ConsoleViewContentType.ERROR_OUTPUT)
+                    NotificationUtil.error(project, "ANT not found. Set ANT_HOME in ~/.zshrc")
                     return@executeOnPooledThread
                 }
                 val antExec = AntResolver.resolveAntExecutable(antHome)
@@ -159,23 +201,24 @@ class UpdateDeploymentAction : AnAction("Update Deployment", "Deploy a zip file 
                     return@executeOnPooledThread
                 }
 
-                // Step 3: Pre-creation hook
-                printToConsole(console, project, "[3/5] Running pre-creation hook...\n", ConsoleViewContentType.SYSTEM_OUTPUT)
+                // Step 5a: Pre-creation hook
+                printToConsole(console, project, "[5/5] Running ANT hooks...\n", ConsoleViewContentType.SYSTEM_OUTPUT)
+                printToConsole(console, project, "  Running pre-creation hook...\n", ConsoleViewContentType.SYSTEM_OUTPUT)
                 val preCreationOk = runAntHook(
                     console, project, antExec, buildXml, hookBaseDir,
                     "precreationhook", repositoryPath, deploymentPath, parentService,
                     emptyMap()
                 )
                 if (!preCreationOk) {
-                    printToConsole(console, project, "Pre-creation hook FAILED.\n\n", ConsoleViewContentType.ERROR_OUTPUT)
+                    printToConsole(console, project, "  Pre-creation hook FAILED.\n\n", ConsoleViewContentType.ERROR_OUTPUT)
                 } else {
-                    printToConsole(console, project, "Pre-creation hook completed.\n\n", ConsoleViewContentType.SYSTEM_OUTPUT)
+                    printToConsole(console, project, "  Pre-creation hook completed.\n\n", ConsoleViewContentType.SYSTEM_OUTPUT)
                 }
 
-                // Step 4: Post-creation hook (uses zide_build basedir)
+                // Step 5b: Post-creation hook (uses zide_build basedir)
                 val postHookBaseDir = Path.of(repositoryPath, ".zide_resources", "zide_build").toString()
                 val postBuildXml = Path.of(postHookBaseDir, "build.xml").toString()
-                printToConsole(console, project, "[4/5] Running post-creation hook...\n", ConsoleViewContentType.SYSTEM_OUTPUT)
+                printToConsole(console, project, "  Running post-creation hook...\n", ConsoleViewContentType.SYSTEM_OUTPUT)
                 val postCreationOk = runAntHook(
                     console, project, antExec, postBuildXml, postHookBaseDir,
                     "postservicetarget", repositoryPath, deploymentPath, parentService,
@@ -186,22 +229,22 @@ class UpdateDeploymentAction : AnAction("Update Deployment", "Deploy a zip file 
                     )
                 )
                 if (!postCreationOk) {
-                    printToConsole(console, project, "Post-creation hook FAILED.\n\n", ConsoleViewContentType.ERROR_OUTPUT)
+                    printToConsole(console, project, "  Post-creation hook FAILED.\n\n", ConsoleViewContentType.ERROR_OUTPUT)
                 } else {
-                    printToConsole(console, project, "Post-creation hook completed.\n\n", ConsoleViewContentType.SYSTEM_OUTPUT)
+                    printToConsole(console, project, "  Post-creation hook completed.\n\n", ConsoleViewContentType.SYSTEM_OUTPUT)
                 }
 
-                // Step 5: Zide module hook
-                printToConsole(console, project, "[5/5] Running zide module hook...\n", ConsoleViewContentType.SYSTEM_OUTPUT)
+                // Step 5c: Zide module hook
+                printToConsole(console, project, "  Running zide module hook...\n", ConsoleViewContentType.SYSTEM_OUTPUT)
                 val moduleHookOk = runAntHook(
                     console, project, antExec, buildXml, hookBaseDir,
                     "zidemodulehook", repositoryPath, deploymentPath, parentService,
                     emptyMap()
                 )
                 if (!moduleHookOk) {
-                    printToConsole(console, project, "Zide module hook FAILED.\n\n", ConsoleViewContentType.ERROR_OUTPUT)
+                    printToConsole(console, project, "  Zide module hook FAILED.\n\n", ConsoleViewContentType.ERROR_OUTPUT)
                 } else {
-                    printToConsole(console, project, "Zide module hook completed.\n\n", ConsoleViewContentType.SYSTEM_OUTPUT)
+                    printToConsole(console, project, "  Zide module hook completed.\n\n", ConsoleViewContentType.SYSTEM_OUTPUT)
                 }
 
                 printToConsole(console, project, "=== Deployment update completed ===\n", ConsoleViewContentType.SYSTEM_OUTPUT)
@@ -217,14 +260,20 @@ class UpdateDeploymentAction : AnAction("Update Deployment", "Deploy a zip file 
     private fun readRepositoryPath(projectPath: String?): String? {
         if (projectPath == null) return null
         val repoPropsFile = Path.of(projectPath, ".zide_resources", "repository.properties")
-        if (!repoPropsFile.exists()) return null
-        return try {
-            val props = Properties()
-            Files.newInputStream(repoPropsFile).use { props.load(it) }
-            props.getProperty("repositorypath")?.trim()?.ifEmpty { null }
-        } catch (_: Exception) {
-            null
+        if (repoPropsFile.exists()) {
+            try {
+                val props = Properties()
+                Files.newInputStream(repoPropsFile).use { props.load(it) }
+                val value = props.getProperty("repositorypath")?.trim()?.ifEmpty { null }
+                if (value != null) return value
+            } catch (_: Exception) { }
         }
+        // Fallback: .zide_resources/../ is the repository path
+        val zideResources = Path.of(projectPath, ".zide_resources")
+        if (zideResources.exists()) {
+            return zideResources.parent.toAbsolutePath().normalize().toString()
+        }
+        return null
     }
 
     private fun runAntHook(

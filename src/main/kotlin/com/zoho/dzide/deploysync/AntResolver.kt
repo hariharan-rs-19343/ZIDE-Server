@@ -1,9 +1,8 @@
 package com.zoho.dzide.deploysync
 
+import java.io.File
 import java.nio.file.Path
 import kotlin.io.path.exists
-import kotlin.io.path.isDirectory
-import kotlin.io.path.listDirectoryEntries
 
 object AntResolver {
 
@@ -22,22 +21,31 @@ object AntResolver {
         return if (isValidAntHome(antHome)) antHome else null
     }
 
-    private fun detectAntHomeFromAntSetup(projectPath: String): String? {
-        val parentDir = Path.of(projectPath).toAbsolutePath().normalize().parent ?: return null
-        val antSetupDir = parentDir.resolve(".antsetup")
-        if (!antSetupDir.exists() || !antSetupDir.isDirectory()) return null
-
-        return antSetupDir.listDirectoryEntries()
-            .filter { it.isDirectory() && it.fileName.toString().lowercase().contains("ant") }
-            .sortedBy { it.fileName.toString() }
-            .firstOrNull { isValidAntHome(it.toString()) }
-            ?.toString()
+    private fun detectAntHomeFromShellRc(): String? {
+        val rcFiles = listOf(
+            File(System.getProperty("user.home"), ".zshrc"),
+            File(System.getProperty("user.home"), ".bashrc"),
+            File(System.getProperty("user.home"), ".bash_profile")
+        )
+        for (rcFile in rcFiles) {
+            if (!rcFile.exists()) continue
+            rcFile.readLines().forEach { line ->
+                val trimmed = line.trim()
+                // Match: export ANT_HOME=... or ANT_HOME=...
+                val match = Regex("""^(?:export\s+)?ANT_HOME\s*=\s*["']?(.+?)["']?\s*$""").find(trimmed)
+                if (match != null) {
+                    val value = match.groupValues[1]
+                    if (isValidAntHome(value)) return value
+                }
+            }
+        }
+        return null
     }
 
     fun resolveAntHome(projectPath: String, persistedAntHome: String?): String? {
         if (isValidAntHome(persistedAntHome)) return persistedAntHome
         detectAntHomeFromEnvironment()?.let { return it }
-        detectAntHomeFromAntSetup(projectPath)?.let { return it }
+        detectAntHomeFromShellRc()?.let { return it }
         return null
     }
 }

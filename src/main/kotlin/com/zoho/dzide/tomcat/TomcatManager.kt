@@ -50,7 +50,7 @@ class TomcatManager(private val project: Project) {
         }
     }
 
-    private fun resolveEffectiveLaunchArgs(server: TomcatServer): String? {
+    private fun resolveEffectiveLaunchArgs(server: TomcatServer): String {
         val latestFromProperties = server.zidePropertiesPath?.let {
             ModuleZidePropsParser.readLaunchVmArgumentsFromProperties(it)
         }
@@ -59,8 +59,8 @@ class TomcatManager(private val project: Project) {
         }
         val zideArgs = (latestFromProperties ?: server.zideLaunchVmArguments ?: "").trim()
         val manualArgs = (server.manualLaunchArgs ?: "").trim()
-        val merged = listOf(zideArgs, manualArgs).filter { it.isNotEmpty() }.joinToString(" ").trim()
-        return merged.ifEmpty { null }
+        val extra = listOf(zideArgs, manualArgs).filter { it.isNotEmpty() }.joinToString(" ").trim()
+        return if (extra.isNotEmpty()) "$DEFAULT_VM_ARGS $extra" else DEFAULT_VM_ARGS
     }
 
     private fun buildCatalinaEnvVars(server: TomcatServer, debugPort: Int? = null): Map<String, String> {
@@ -70,10 +70,8 @@ class TomcatManager(private val project: Project) {
             env["JPDA_TRANSPORT"] = "dt_socket"
         }
         val launchArgs = resolveEffectiveLaunchArgs(server)
-        if (launchArgs != null) {
-            env["CATALINA_OPTS"] = launchArgs
-            log("Applying launch VM arguments for ${server.name}.")
-        }
+        env["CATALINA_OPTS"] = launchArgs
+        log("Applying VM arguments for ${server.name}.")
         return env
     }
 
@@ -373,6 +371,19 @@ class TomcatManager(private val project: Project) {
     }
 
     companion object {
+        private const val DEFAULT_VM_ARGS = "-Dcatalina.base=. -Dcatalina.home=. -Djava.io.tmpdir=./temp " +
+            "-Duse.apache=false -Duse.compression=false -Dserver.stats=10000 -Dlog.dir=. " +
+            "-Ddb.home=./../mysql -Dcheck.tomcatport=false -Dcom.adventnet.workengine.serverid= " +
+            "-Dfile.encoding=utf8 -Djava.awt.headless=true " +
+            "-Dcom.adventnet.mfw.bean.BeanProxy=com.adventnet.sas.share.ExtendedBeanProxy " +
+            "-Djava.util.logging.config.file=./conf/logging.properties " +
+            "-Djava.util.logging.manager=org.apache.juli.ClassLoaderLogManager " +
+            "-Ddb.vendor.name=mysql -Dis.proto=true " +
+            "-DsocksHost=zcode-socksproxy -DsocksPort=5050 " +
+            "-Xmx700M -Xms300M -XX:MetaspaceSize=256M -XX:MaxMetaspaceSize=512M " +
+            "-Dhttp.proxyHost=127.0.0.1 -Dhttp.proxyPort=3128 " +
+            "-Dhttps.proxyHost=127.0.0.1 -Dhttps.proxyPort=3128"
+
         fun getInstance(project: Project): TomcatManager =
             project.getService(TomcatManager::class.java)
     }

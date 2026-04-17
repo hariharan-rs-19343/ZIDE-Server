@@ -34,7 +34,7 @@ class DebugOnServerAction : AnAction("Debug", "Start server in debug mode and at
                 }
 
                 // Small extra delay to let JPDA fully initialize after port opens
-                Thread.sleep(1000)
+                Thread.sleep(3000)
 
                 ApplicationManager.getApplication().invokeLater {
                     if (project.isDisposed) return@invokeLater

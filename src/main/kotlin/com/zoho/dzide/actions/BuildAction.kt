@@ -60,27 +60,27 @@ class BuildAction : AnAction("Build", "Run ANT build script", null) {
 
         ApplicationManager.getApplication().executeOnPooledThread {
             try {
-                val buildResult = ProcessUtil.executeCapturing(
+                val handler = ProcessUtil.executeStreaming(
                     command = listOf(antExe),
                     workingDir = buildDir.toString(),
                     env = mapOf("ANT_HOME" to antHome),
-                    timeoutMs = 300_000
+                    onStdout = { line ->
+                        printToConsole(console, project, line + "\n", ConsoleViewContentType.NORMAL_OUTPUT)
+                    },
+                    onStderr = { line ->
+                        printToConsole(console, project, line + "\n", ConsoleViewContentType.ERROR_OUTPUT)
+                    },
+                    onExit = { exitCode ->
+                        if (exitCode != 0) {
+                            printToConsole(console, project, "\nBuild FAILED (exit code $exitCode)\n", ConsoleViewContentType.ERROR_OUTPUT)
+                            NotificationUtil.error(project, "ANT build failed with exit code $exitCode")
+                        } else {
+                            printToConsole(console, project, "\n=== Build complete ===\n", ConsoleViewContentType.SYSTEM_OUTPUT)
+                            NotificationUtil.info(project, "Build completed: $productName")
+                        }
+                    }
                 )
-
-                if (buildResult.stdout.isNotBlank()) {
-                    printToConsole(console, project, buildResult.stdout + "\n", ConsoleViewContentType.NORMAL_OUTPUT)
-                }
-                if (buildResult.stderr.isNotBlank()) {
-                    printToConsole(console, project, buildResult.stderr + "\n", ConsoleViewContentType.ERROR_OUTPUT)
-                }
-
-                if (buildResult.exitCode != 0) {
-                    printToConsole(console, project, "\nBuild FAILED (exit code ${buildResult.exitCode})\n", ConsoleViewContentType.ERROR_OUTPUT)
-                    NotificationUtil.error(project, "ANT build failed with exit code ${buildResult.exitCode}")
-                } else {
-                    printToConsole(console, project, "\n=== Build complete ===\n", ConsoleViewContentType.SYSTEM_OUTPUT)
-                    NotificationUtil.info(project, "Build completed: $productName")
-                }
+                handler.waitFor()
             } catch (ex: Exception) {
                 printToConsole(console, project, "Error: ${ex.message}\n", ConsoleViewContentType.ERROR_OUTPUT)
                 NotificationUtil.error(project, "Build failed: ${ex.message}")
