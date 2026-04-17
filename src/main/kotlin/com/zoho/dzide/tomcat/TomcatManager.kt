@@ -229,10 +229,20 @@ class TomcatManager(private val project: Project) {
         }
 
         if (PortUtil.isPortInUse(server.port)) {
-            log("Server ${server.name} is already running on port ${server.port}")
-            NotificationUtil.warn(project, "Server ${server.name} is already running!")
-            serverProvider.updateServer(server.id, mapOf("status" to "running"))
-            return
+            log("Server ${server.name} is already running on port ${server.port}. Stopping before restart...")
+            stopServer(server)
+            val maxWait = 15_000L
+            val interval = 500L
+            var waited = 0L
+            while (waited < maxWait && PortUtil.isPortInUse(server.port)) {
+                Thread.sleep(interval)
+                waited += interval
+            }
+            if (PortUtil.isPortInUse(server.port)) {
+                logError("Server did not stop within ${maxWait / 1000}s. Cannot start.")
+                NotificationUtil.error(project, "Server ${server.name} did not stop. Cannot restart.")
+                return
+            }
         }
 
         patchDeploymentConfigs(server)
@@ -288,9 +298,18 @@ class TomcatManager(private val project: Project) {
         }
 
         if (PortUtil.isPortInUse(server.port)) {
-            log("Server ${server.name} is already running. Skipping debug start.")
-            serverProvider.updateServer(server.id, mapOf("status" to "running", "debugPort" to debugPort))
-            return
+            log("Server ${server.name} is already running on port ${server.port}. Stopping before debug restart...")
+            stopServer(server)
+            val maxWait = 15_000L
+            val interval = 500L
+            var waited = 0L
+            while (waited < maxWait && PortUtil.isPortInUse(server.port)) {
+                Thread.sleep(interval)
+                waited += interval
+            }
+            if (PortUtil.isPortInUse(server.port)) {
+                throw IllegalStateException("Server did not stop within ${maxWait / 1000}s. Cannot start in debug mode.")
+            }
         }
 
         if (PortUtil.isPortInUse(debugPort)) {
