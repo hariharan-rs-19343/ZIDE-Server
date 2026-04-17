@@ -10,6 +10,8 @@ import com.zoho.dzide.parser.ModuleZidePropsParser
 import com.zoho.dzide.util.NotificationUtil
 import com.zoho.dzide.util.PortUtil
 import com.zoho.dzide.util.ShellUtil
+import com.zoho.dzide.zide.DeploymentConfigPatcher
+import com.zoho.dzide.zide.ZideConfigParser
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
@@ -90,6 +92,135 @@ class TomcatManager(private val project: Project) {
         return env
     }
 
+    /**
+     * Patches deployment config files before server start, replicating Eclipse ZIDE behavior.
+     * Reads ZIDE config from the project and patches server.xml, persistence-configurations.xml,
+     * and security-properties.xml with values from zide_properties.xml.
+     */
+    fun patchDeploymentConfigs(server: TomcatServer) {
+        val projectPath = project.basePath ?: return
+        val zideConfig = ZideConfigParser.readZideConfig(projectPath) ?: return
+        val serviceProps = zideConfig.service?.properties ?: return
+        val zideProps = zideConfig.properties?.properties ?: emptyMap()
+
+        val patchCtx = DeploymentConfigPatcher.buildPatchContext(serviceProps, zideProps)
+        if (patchCtx == null) {
+            log("Skipping config patching: missing DEPLOYMENT_FOLDER or PARENT_SERVICE.")
+            return
+        }
+
+        log("Patching deployment configs for ${patchCtx.parentService}...")
+        val result = DeploymentConfigPatcher.patchAll(patchCtx)
+
+        if (result.serverXmlPatched) log("  Patched server.xml (Context element, shutdown port)")
+        if (result.webXmlPatched) log("  Patched web.xml (JSP servlet for dynamic compilation)")
+        if (result.persistencePatched) log("  Patched persistence-configurations.xml (DBName, StartDBServer)")
+        if (result.securityPatched) log("  Patched security-properties.xml (IAM server, service name, logout URL)")
+        for (err in result.errors) {
+            logError("  Patch error: $err")
+        }
+        if (!result.serverXmlPatched && !result.webXmlPatched && !result.persistencePatched && !result.securityPatched && result.errors.isEmpty()) {
+            log("  Config files already up to date.")
+        }
+    }
+
+    /**
+     * Runs postzidedeploy.sh from the project's resources/zide-scripts/ directory.
+     * This script copies app.properties into the deployment's WEB-INF/conf/ folder.
+     */
+    private fun runPostZideDeployScript(server: TomcatServer) {
+        val projectPath = project.basePath ?: return
+        val scriptPath = Path.of(projectPath, "resources", "zide-scripts", "postzidedeploy.sh")
+        if (!scriptPath.exists()) {
+            log("postzidedeploy.sh not found at $scriptPath, skipping.")
+            return
+        }
+
+        val deploymentFolder = server.zideRuntimeProperties?.get("ZIDE.DEPLOYMENT_FOLDER") ?: return
+        val deploymentBase = Path.of(deploymentFolder, "AdventNet", "Sas").toString()
+
+        log("Running postzidedeploy.sh...")
+        val command = ShellUtil.buildShellCommand(
+            "chmod", "+x", "\"$scriptPath\"",
+            "&&", "sh", "\"$scriptPath\"", "\"$deploymentBase\""
+        )
+        val result = com.zoho.dzide.util.ProcessUtil.executeCapturing(
+            command = command,
+            workingDir = deploymentFolder,
+            timeoutMs = 30_000
+        )
+        if (result.stdout.isNotBlank()) log(result.stdout.trim())
+        if (result.stderr.isNotBlank()) logError(result.stderr.trim())
+        if (result.exitCode == 0) {
+            log("postzidedeploy.sh completed successfully.")
+        } else {
+            logError("postzidedeploy.sh failed with exit code ${result.exitCode}")
+        }
+    }
+
+    /**
+     * Copies server.xml files to the correct locations before Tomcat starts.
+     *
+     * Step 1: Copy tomcat/conf/server.xml → webapps/{parentService}/WEB-INF/conf/server.xml
+     *         (the app needs a copy of the current tomcat conf server.xml)
+     * Step 2: Copy Servers/{parentService}-config/server.xml → tomcat/conf/server.xml
+     *         (Eclipse's managed server.xml with Context element, SSL, etc. becomes the active tomcat config)
+     *
+     * These two server.xml files have different content — each copy is verified before proceeding.
+     */
+    private fun syncServerXmlFiles(server: TomcatServer) {
+        val deploymentFolder = server.zideRuntimeProperties?.get("ZIDE.DEPLOYMENT_FOLDER") ?: return
+        val parentService = server.zideRuntimeProperties?.get("ZIDE.PARENT_SERVICE")
+            ?: run {
+                val projectPath = project.basePath ?: return
+                val zideConfig = ZideConfigParser.readZideConfig(projectPath) ?: return
+                zideConfig.service?.properties?.get("ZIDE.PARENT_SERVICE") ?: return
+            }
+
+        val tomcatConfDir = Path.of(deploymentFolder, "AdventNet", "Sas", "tomcat", "conf")
+        val tomcatConfServerXml = tomcatConfDir.resolve("server.xml")
+        val webappConfDir = Path.of(deploymentFolder, "AdventNet", "Sas", "tomcat", "webapps", parentService, "WEB-INF", "conf")
+        val webappConfServerXml = webappConfDir.resolve("server.xml")
+
+        // Resolve Servers/{parentService}-config/ relative to workspace root
+        // Deployment folder is {workspace}/deployment/{service}, so workspace = deployment/../..
+        val workspaceRoot = Path.of(deploymentFolder).parent?.parent
+        val serversConfigDir = workspaceRoot?.resolve("Servers")?.resolve("$parentService-config")
+        val serversServerXml = serversConfigDir?.resolve("server.xml")
+
+        log("Syncing server.xml files...")
+
+        // Step 1: Copy tomcat/conf/server.xml → webapps/{parentService}/WEB-INF/conf/server.xml
+        if (tomcatConfServerXml.exists() && webappConfDir.exists()) {
+            Files.copy(tomcatConfServerXml, webappConfServerXml, StandardCopyOption.REPLACE_EXISTING)
+            log("  Copied tomcat/conf/server.xml → webapps/$parentService/WEB-INF/conf/server.xml")
+        } else {
+            if (!tomcatConfServerXml.exists()) logError("  tomcat/conf/server.xml not found, skipping copy to webapp.")
+            if (!webappConfDir.exists()) logError("  webapps/$parentService/WEB-INF/conf/ not found, skipping copy.")
+        }
+
+        // Step 2: Copy Servers/{parentService}-config/server.xml → tomcat/conf/server.xml
+        if (serversServerXml != null && serversServerXml.exists()) {
+            Files.copy(serversServerXml, tomcatConfServerXml, StandardCopyOption.REPLACE_EXISTING)
+            log("  Copied Servers/$parentService-config/server.xml → tomcat/conf/server.xml")
+        } else {
+            log("  Servers/$parentService-config/server.xml not found, skipping. Tomcat conf server.xml unchanged.")
+        }
+    }
+
+    /**
+     * Runs all pre-start setup steps in order before launching Tomcat:
+     * 1. Execute postzidedeploy.sh (copies app.properties)
+     * 2. Copy tomcat/conf/server.xml → webapp WEB-INF/conf/
+     * 3. Copy Servers/{service}-config/server.xml → tomcat/conf/
+     */
+    fun runPreStartSetup(server: TomcatServer) {
+        log("--- Pre-start setup ---")
+        runPostZideDeployScript(server)
+        syncServerXmlFiles(server)
+        log("--- Pre-start setup complete ---")
+    }
+
     fun startServer(server: TomcatServer) {
         val script = ShellUtil.catalinaScript(server.path)
         if (!script.exists()) {
@@ -103,6 +234,9 @@ class TomcatManager(private val project: Project) {
             serverProvider.updateServer(server.id, mapOf("status" to "running"))
             return
         }
+
+        patchDeploymentConfigs(server)
+        runPreStartSetup(server)
 
         log("======================================")
         log("Starting Tomcat server: ${server.name}")
@@ -162,6 +296,9 @@ class TomcatManager(private val project: Project) {
         if (PortUtil.isPortInUse(debugPort)) {
             throw IllegalStateException("Debug port $debugPort is already in use.")
         }
+
+        patchDeploymentConfigs(server)
+        runPreStartSetup(server)
 
         log("======================================")
         log("Starting Tomcat server in debug mode: ${server.name}")

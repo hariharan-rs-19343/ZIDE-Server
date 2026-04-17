@@ -16,6 +16,7 @@ import com.zoho.dzide.util.NotificationUtil
 import com.zoho.dzide.util.PortUtil
 import com.zoho.dzide.util.ProcessUtil
 import com.zoho.dzide.util.ShellUtil
+import com.zoho.dzide.zide.DeploymentConfigPatcher
 import com.zoho.dzide.zide.ZideConfigParser
 import java.nio.file.Files
 import java.nio.file.Path
@@ -241,6 +242,33 @@ class UpdateDeploymentAction : AnAction("Update Deployment", "Deploy a zip file 
                 } else {
                     printToConsole(console, project, "  Zide module hook completed.\n\n", ConsoleViewContentType.SYSTEM_OUTPUT)
                 }
+
+                // Step 6: Patch deployment config files
+                printToConsole(console, project, "[6/6] Patching deployment config files...\n", ConsoleViewContentType.SYSTEM_OUTPUT)
+                val patchCtx = DeploymentConfigPatcher.buildPatchContext(
+                    zideConfig.service?.properties ?: emptyMap(),
+                    zideProps
+                )
+                if (patchCtx != null) {
+                    val patchResult = DeploymentConfigPatcher.patchAll(patchCtx)
+                    if (patchResult.serverXmlPatched)
+                        printToConsole(console, project, "  Patched server.xml (Context element, shutdown port)\n", ConsoleViewContentType.SYSTEM_OUTPUT)
+                    if (patchResult.webXmlPatched)
+                        printToConsole(console, project, "  Patched web.xml (JSP servlet for dynamic compilation)\n", ConsoleViewContentType.SYSTEM_OUTPUT)
+                    if (patchResult.persistencePatched)
+                        printToConsole(console, project, "  Patched persistence-configurations.xml\n", ConsoleViewContentType.SYSTEM_OUTPUT)
+                    if (patchResult.securityPatched)
+                        printToConsole(console, project, "  Patched security-properties.xml\n", ConsoleViewContentType.SYSTEM_OUTPUT)
+                    for (err in patchResult.errors) {
+                        printToConsole(console, project, "  Patch error: $err\n", ConsoleViewContentType.ERROR_OUTPUT)
+                    }
+                    if (!patchResult.serverXmlPatched && !patchResult.webXmlPatched && !patchResult.persistencePatched && !patchResult.securityPatched && patchResult.errors.isEmpty()) {
+                        printToConsole(console, project, "  Config files already up to date.\n", ConsoleViewContentType.SYSTEM_OUTPUT)
+                    }
+                } else {
+                    printToConsole(console, project, "  Skipped: missing DEPLOYMENT_FOLDER or PARENT_SERVICE.\n", ConsoleViewContentType.LOG_WARNING_OUTPUT)
+                }
+                printToConsole(console, project, "\n", ConsoleViewContentType.SYSTEM_OUTPUT)
 
                 printToConsole(console, project, "=== Deployment update completed ===\n", ConsoleViewContentType.SYSTEM_OUTPUT)
                 NotificationUtil.info(project, "Deployment updated successfully.")
