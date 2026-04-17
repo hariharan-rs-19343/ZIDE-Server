@@ -65,15 +65,15 @@ This launches a sandboxed IntelliJ IDEA instance with the plugin installed.
 
 Available under **ZIDE** in the main menu bar:
 
-| Action | Description |
-|--------|-------------|
-| Add Tomcat Server | Add a new server (manual or ZIDE auto-config) |
-| Edit Server | Modify server settings |
-| Remove Server | Delete a server configuration |
-| Run | Start Tomcat (`catalina.sh run`) |
-| Debug | Start with JPDA and auto-attach debugger |
-| Stop | Stop the running Tomcat process |
-| Refresh | Refresh all server statuses |
-| Build | Run ANT build |
-| Update Deployment | Deploy zip to server |
-| App Logs | View application logs |
+| Action | Shortcut | Description |
+|--------|----------|-------------|
+| Add Tomcat Server | | Add a new server (manual or ZIDE auto-config) |
+| Edit Server | | Modify server settings |
+| Remove Server | | Delete a server configuration |
+| Run | `Ctrl+Shift+I` | Start Tomcat (`catalina.sh run`) |
+| Debug | `Ctrl+Shift+D` | Start with JPDA and auto-attach debugger |
+| Stop | `Ctrl+Shift+.` | Stop the running Tomcat process |
+| Refresh | | Refresh all server statuses |
+| Build | `Ctrl+Shift+B` | Run ANT build |
+| Update Deployment | | Deploy zip to server |
+| App Logs | | View application logs |

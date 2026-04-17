@@ -14,6 +14,11 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <b>0.0.3</b>
+        <ul>
+            <li>Keyboard shortcuts — Run (Ctrl+Shift+I), Debug (Ctrl+Shift+D), Stop (Ctrl+Shift+.), Build (Ctrl+Shift+B)</li>
+            <li>Plugin zip renamed to zide-intelliJ-plugin-{version}.zip</li>
+        </ul>
         <b>0.0.2</b>
         <ul>
             <li>Deployment config patching — automatically patches server.xml, web.xml, persistence-configurations.xml, and security-properties.xml before server start</li>
