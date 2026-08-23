@@ -4,6 +4,17 @@ All notable changes to the ZIDE IntelliJ plugin are documented here.
 
 ---
 
+## [0.1.1] — 2026-08-23
+
+### Fixed
+- **Debug trigger on running server** — triggering Debug while the server is already running now stops it first, waits for the port to free (up to 15s), then starts in debug mode. Previously it silently skipped the debug start ("Skipping debug start").
+- **Output console clears on start/restart** — the SAS-ZIDE Output tab is cleared at the beginning of each server start and restart, matching the behavior of the Build and Update Deployment actions.
+
+### Changed
+- **ANT build via IntelliJ Terminal** — the Build action now opens a new "ZIDE Build" tab in IntelliJ's built-in Terminal, running ANT with the project `build/` as the working directory. Ctrl+C kills the build; full terminal scroll-back and copy/paste are available.
+
+---
+
 ## [0.1.0] — 2026-08-19
 
 ### Added

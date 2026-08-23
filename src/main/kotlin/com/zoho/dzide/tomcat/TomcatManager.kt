@@ -462,6 +462,7 @@ class TomcatManager(private val project: Project) : Disposable {
 
         ApplicationManager.getApplication().executeOnPooledThread {
             if (project.isDisposed) return@executeOnPooledThread
+            consoleView?.clear()
 
             if (PortUtil.isPortInUse(server.port)) {
                 log("Server ${server.name} is already running on port ${server.port}. Stopping before restart...")
@@ -533,19 +534,32 @@ class TomcatManager(private val project: Project) : Disposable {
             throw IllegalStateException("Startup script not found at $script")
         }
 
-        if (PortUtil.isPortInUse(server.port)) {
-            log("Server ${server.name} is already running. Skipping debug start.")
-            serverProvider.updateServer(server.id, mapOf("status" to "running", "debugPort" to debugPort))
-            configureCompilerOutputForDeployment(server)
-            return
-        }
-
-        if (PortUtil.isPortInUse(debugPort)) {
-            throw IllegalStateException("Debug port $debugPort is already in use.")
-        }
-
         ApplicationManager.getApplication().executeOnPooledThread {
             if (project.isDisposed) return@executeOnPooledThread
+            consoleView?.clear()
+
+            if (PortUtil.isPortInUse(server.port)) {
+                log("Server ${server.name} is already running. Stopping before debug start...")
+                stopServer(server)
+                val maxWait = 15_000L
+                val interval = 500L
+                var waited = 0L
+                while (waited < maxWait && PortUtil.isPortInUse(server.port)) {
+                    Thread.sleep(interval)
+                    waited += interval
+                }
+                if (PortUtil.isPortInUse(server.port)) {
+                    logError("Server did not stop within ${maxWait / 1000}s. Cannot start in debug mode.")
+                    NotificationUtil.error(project, "Server ${server.name} did not stop. Cannot start in debug mode.")
+                    return@executeOnPooledThread
+                }
+            }
+
+            if (PortUtil.isPortInUse(debugPort)) {
+                logError("Debug port $debugPort is already in use.")
+                NotificationUtil.error(project, "Debug port $debugPort is already in use.")
+                return@executeOnPooledThread
+            }
 
             runPreStartSetup(server)
             patchDeploymentConfigs(server)
@@ -646,20 +660,34 @@ class TomcatManager(private val project: Project) : Disposable {
         // Verify shutdown, fallback to lsof + kill if still running
         val debugPort = server.debugPort
         Thread {
-            Thread.sleep(3000)
+            // Poll until the HTTP port is free instead of sleeping a fixed 3s.
+            // A fixed sleep caused the background thread to fire after a new server
+            // had already started on restart, killing the new process's debug port.
+            val maxWait = 15_000L
+            val interval = 300L
+            var waited = 0L
+            while (waited < maxWait && PortUtil.isPortInUse(server.port)) {
+                Thread.sleep(interval)
+                waited += interval
+            }
+
             var stillRunning = PortUtil.isPortInUse(server.port)
             if (stillRunning) {
+                // destroyProcess() failed — server is stubborn, force-kill by port
                 log("Server still running on port ${server.port}. Attempting force kill via lsof...")
                 forceKillByPort(server.port)
                 Thread.sleep(2000)
                 stillRunning = PortUtil.isPortInUse(server.port)
+
+                // Only clean up the debug port when the HTTP port also needed force-killing.
+                // If destroyProcess() worked cleanly both ports are already free (same JVM).
+                // Checking unconditionally was what killed a new debug server on restart.
+                if (debugPort != null && debugPort > 0 && PortUtil.isPortInUse(debugPort)) {
+                    log("Force-killing debug port $debugPort for ${server.name}")
+                    forceKillByPort(debugPort)
+                }
             }
-            // Ensure JDWP debug port is also gone (same JVM usually, but catalina
-            // fallback / partial kills can leave the listener behind).
-            if (debugPort != null && debugPort > 0 && PortUtil.isPortInUse(debugPort)) {
-                log("Force-killing debug port $debugPort for ${server.name}")
-                forceKillByPort(debugPort)
-            }
+
             if (!stillRunning) {
                 serverProvider.updateServer(server.id, mapOf("status" to "stopped", "debugPort" to null))
                 log("Server ${server.name} stopped successfully!")

@@ -53,6 +53,12 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <b>0.1.1</b>
+        <ul>
+            <li>ANT build runs in IntelliJ Terminal tab — full Ctrl+C kill, scroll-back, and copy/paste support</li>
+            <li>Output console clears automatically on each server start and restart</li>
+            <li>Debug trigger on running server — stops the running server first, then restarts in debug mode (no more "Skipping debug start")</li>
+        </ul>
         <b>0.1.0</b>
         <ul>
             <li>Clone shared ZIDE config repo into {workspace}/zide; install.xml recipes from zide/deployment/{moduleDir}/{deployType}/ with Tomcat-home replace root</li>
@@ -172,6 +178,7 @@
 
     <depends>com.intellij.modules.platform</depends>
     <depends>com.intellij.java</depends>
+    <depends>org.jetbrains.plugins.terminal</depends>
 
     <extensions defaultExtensionNs="com.intellij">
         <!-- Startup activity -->

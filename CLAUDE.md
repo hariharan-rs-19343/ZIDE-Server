@@ -1,0 +1,194 @@
+# ZIDE IntelliJ Plugin — Claude Instructions
+
+## Project Identity
+
+- Plugin ID: `com.zoho.dzide`
+- Current Version: 0.1.1
+- Language: Kotlin 2.2.0, JVM 21
+- Build: Gradle 9.0 (Kotlin DSL), IntelliJ Platform Plugin 2.16.0
+- Target IDE: IntelliJ IDEA 2024.3+ (Community or Ultimate)
+- Build command: `./gradlew clean buildPlugin`
+- Output zip: `build/distributions/zide-intelliJ-plugin-{version}.zip`
+- Version defined in: `gradle.properties` (`pluginVersion`)
+
+## Auto-Build Rule
+
+After fixing a bug or implementing a feature, always run the Gradle build as the final step before reporting completion:
+
+```bash
+./gradlew clean buildPlugin
+```
+
+This compiles, tests, and produces the distributable zip. If the build fails, fix the errors before finishing.
+
+## Package Structure (`src/main/kotlin/com/zoho/dzide/`)
+
+- `DzidePlugin.kt` — ProjectActivity startup (logs init, checks ~/.wgetrc, auto-update check)
+- `actions/` — AnAction classes (Start, Stop, Debug, Build, UpdateDeployment, AppLogs, ClearAppLogs, DeploymentProperties, Add/Edit/Remove Server, Restart, Refresh, RunHooks, CustomBuild, Uninstall)
+- `tomcat/` — TomcatManager (lifecycle, compiler output config, build-before-start, project libraries), TomcatServerProvider (CRUD)
+- `deploysync/` — DeploySyncFileCreationListener (BulkFileListener for create/move/save/delete), ResourceSyncManager (ANT hooks, hot-swap trigger, auto-resource copy, file delete sync), AntResolver
+- `zide/` — ZideConfigParser, DeploymentConfigPatcher (server.xml, web.xml, persistence, security, HTTP port — no keystore/HTTPS connector), ZideSetupWizard, DeploymentPropertiesDialog
+- `config/replacer/` — data-driven install.xml / install.properties Replacer at launch (Eclipse parity)
+- `newproject/` — ZideProjectCreator, wizard dialogs/steps, CmToolApiClient
+- `dependency/` — DependencyLinker (WEB-INF/lib project library)
+- `parser/` — ModuleZidePropsParser, PathResolver (resolveWebappDirectory)
+- `model/` — TomcatServer, ProjectServerMapping, ZideModels, ParserModels
+- `persistence/` — TomcatServerState (dzide/tomcat-servers.xml), ZideCacheState (dzide/eclipse-zide.xml)
+- `runconfig/` — TomcatConfigurationType, TomcatRunConfiguration, TomcatRunState, Editor, Options, Factory
+- `toolwindow/` — TomcatToolWindowFactory, TomcatToolbar, TomcatTreeModel, TomcatTreeCellRenderer, TomcatTreePopupHandler
+- `util/` — ProcessUtil, ShellUtil, PortUtil, NotificationUtil, ConsoleUtil
+- `settings/` — ZideSettingsState, ZideSettingsConfigurable, CmToolConfigurable, WgetConfigurable, GitConfigurable, ZohoRepoConfigurable, PasswordFieldWithToggle
+- `update/` — PluginUpdateChecker (GitHub releases auto-update)
+
+## Key Models
+
+- `TomcatServer` — id, name, path, status, port, debugPort, zide* fields (serviceKey, folderPath, propertiesPath, launchVmArguments, hookTasksRaw, autoResourceCopyRaw, repositoryModuleDir, deployType, runtimeProperties, buildXmlPath, buildBaseDir, antHomeResolvedPath)
+- `ProjectServerMapping` — projectPath, serverId, contextPath, warFilePath
+
+## ZIDE Configuration Files (in project)
+
+- `.zide_resources/service.xml` — Service definitions (DEPLOYMENT_FOLDER, PARENT_SERVICE, TOMCAT_VERSION, SERVICE_KEY, REPOSITORY_MODULE_DIR, DEPLOY_TYPE, HTTP_PORT)
+- `.zide_resources/zide_properties.xml` — Environment props (HOST_NAME, USER_MAIL, SCHEMA_NAME, IAM_SERVER, HTTP_PORT, HTTPS_PORT, IAM_SERVICENAME, DB_USER, DB_NAME, DB_PASS)
+- `.zide_resources/repository.properties` — `repositorypath` key
+- `.zide_resources/zide_build/build.xml` — ANT script for deploy-sync hooks + post-creation hook
+- `.zide_resources/zide_hook/build.xml` — ANT script for pre-creation + zide module hooks
+
+## Server Lifecycle
+
+- **Start:** configureProjectLibraries → configureCompilerOutput → buildProjectAndWait → cleanWorkDir → pre-start scripts → syncServerXml → patchDeploymentConfigs → `sh catalina.sh run` with CATALINA_OPTS
+- **Debug:** same as start but `sh catalina.sh jpda run` with JPDA_ADDRESS=*:port, then auto-attaches RemoteConfiguration; auto hot-swap enabled (no dialog)
+- **Stop:** destroyProcess → fallback catalina.sh stop -force → lsof + kill -9
+- **Dispose:** on IDE quit, all processes destroyed + force-kill by port
+
+## Deploy Sync (VFS events via BulkFileListener)
+
+- `.java` → IntelliJ auto-build compiles directly to WEB-INF/classes/ (compiler output redirected) → triggerHotSwap if debug session active → Tomcat reloadable=true detects changes in run mode
+- Other file save (VFileContentChangeEvent) → match hook task mappings → run ANT targets → match auto-copy mappings → copy files
+- File creation (VFileCreateEvent) → same as save: hooks + auto-copy
+- File move (VFileMoveEvent) → same as save: hooks + auto-copy
+- File deletion (VFileDeleteEvent, in before()) → match auto-copy mappings → delete corresponding file from deployment
+- Server resolution uses project.basePath + fallback to first server (handles $PROJECT_DIR$ macro)
+- DeploySyncSaveListener removed — all events handled by DeploySyncFileCreationListener
+
+## Update Deployment Flow
+
+1. Stop server if running
+2. Copy zip to deployment folder
+3. Extract zip
+4. Clean Tomcat work/ directory
+5. Delete old webapps/{parentService}/ directory
+6. Unzip ROOT.war as {parentService} in webapps/
+7. Delete *.war files
+8. Run ANT hooks (precreationhook, postservicetarget, zidemodulehook)
+9. Reset ZIDE.DO_REPLACE=false; apply install.xml Replacer or hardcoded DeploymentConfigPatcher; set DO_REPLACE=true
+
+## ANT Script Detection
+
+**Update Deployment:**
+- ANT Home: persisted path → ANT_HOME env → ~/.zshrc/~/.bashrc/~/.bash_profile scan
+- Pre-creation hook: `{repo}/.zide_resources/zide_hook/build.xml` target=`precreationhook`
+- Post-creation hook: `{repo}/.zide_resources/zide_build/build.xml` target=`postservicetarget`
+- Zide module hook: `{repo}/.zide_resources/zide_hook/build.xml` target=`zidemodulehook`
+- ANT command: `ant -f {build.xml} -Dbasedir={baseDir} clone -Dtarget={target} -DREPOSITORY_PATH=... -DDEPLOYMENT_PATH=... -DZIDE.PARENT_SERVICE=...`
+
+**Deploy Sync / Build:**
+- Build action: runs `ant` in `{project}/build/` directory
+- Deploy-sync hooks: uses `{repo}/.zide_resources/zide_build/build.xml` with targets from Zide.properties `hooks.resourcemodify.all.calltasks`
+
+## Deployment Config Patching
+
+- **Primary:** product `install.xml` / `install.properties` via `config/replacer` at start (gated by `ZIDE.DO_REPLACE` / Settings `replacerEveryStart`)
+- **Fallback hardcoded patcher:**
+  - server.xml: Context (reloadable=true), shutdown port, deployOnStartup=false, HTTP Connector port from ZIDE.HTTP_PORT
+  - web.xml: JSP servlet + mapping for dev
+  - persistence-configurations.xml: DBName=postgres, StartDBServer=false
+  - security-properties.xml: IAM server, service name, logout URL
+  - configuration.properties: DB driver, URL, port, vendor, credentials, http.port
+- Plugin **never** downloads or overwrites `sas.keystore` and **never** injects HTTPS Connector (App. Server container owns SSL; Eclipse-aligned)
+- Existing reloadable="false" auto-migrated to "true"
+
+## Settings (Settings > Tools > Zide)
+
+- CMTool: Auth Token (PasswordFieldWithToggle, stored in ZideSettingsState)
+- Wget Configuration: Username + Password (PasswordSafe), writes ~/.wgetrc on Apply
+- Git: Path (browse + auto-detect) + Username + Password (PasswordSafe)
+- Zoho Repository: Username + Password (PasswordSafe)
+- Application-level persistence in `dzide-settings.xml`
+- Passwords encrypted via IntelliJ PasswordSafe
+
+## Keyboard Shortcuts
+
+- Run: Ctrl+Shift+I
+- Debug: Ctrl+Shift+D
+- Stop: Ctrl+Shift+.
+- Build: Ctrl+Shift+B
+- Update Deployment: Ctrl+Shift+U
+- App Logs: Ctrl+Shift+L
+- Clear App Logs: Option+Shift+K (Alt+Shift+K)
+
+## Tool Window: SAS-ZIDE (bottom)
+
+- Tabs: Servers (tree), Output (console), App Logs (console)
+- Toolbar: Add, Refresh, Stop, Restart (Servers tab); Refresh, Clear App Logs (App Logs tab)
+
+## Important Implementation Details
+
+- TomcatManager implements Disposable (kills servers on IDE quit)
+- serverProcesses uses ConcurrentHashMap for thread safety
+- JPDA_ADDRESS format: `*:port` (JDK 9+ compatible)
+- DebugOnServerAction sets module on RemoteConfiguration for breakpoint resolution
+- AppLogsAction reads only last 5000 lines (tail-read via RandomAccessFile)
+- ServerActionUtil uses Messages.showChooseDialog (modal, synchronous)
+- ProcessUtil.executeStreaming delivers raw text chunks (don't append \n)
+- ZideConfigParser uses mtime-based in-memory caching
+- ~/.wgetrc checked on startup; missing → balloon warning
+- PathResolver.resolveWebappDirectory: tries PARENT_SERVICE → docBase from server.xml → scans webapps/ for WEB-INF/classes/
+- configureCompilerOutputForDeployment: sets IntelliJ module output to WEB-INF/classes/ via CompilerModuleExtension
+- buildProjectAndWait: CompilerManager.make() with CountDownLatch (120s timeout)
+- configureProjectLibraries: creates "ZIDE-WEB-INF-lib" project library from all WEB-INF/lib/*.jar
+- DebuggerSettings.RUN_HOTSWAP_ALWAYS set for auto hot-swap without dialog
+- Create order (Eclipse-aligned): pre hooks → module → post/zide hooks → props dialog → open + auto Tomcat register
+- Config replace at start after syncServerXml; never download/replace sas.keystore
+
+## Update Plugin Version Workflow
+
+When the user says **update plugin version** (or equivalent: bump version, cut a release), perform all three steps:
+
+### 1. Bump version in all sources
+- `gradle.properties` — `pluginVersion`
+- `zide-plugin.xml` — `version` attribute and download URL
+- `CLAUDE.md` — Current Version line above
+
+Default bump: patch (`0.0.N` → `0.0.N+1`) unless directed otherwise.
+
+### 2. Update changelogs
+- `CHANGELOG.md` — new `## [X.Y.Z] — YYYY-MM-DD` section
+- `src/main/resources/META-INF/plugin.xml` — prepend `<b>X.Y.Z</b>` + `<ul>` block inside `<change-notes>`
+
+Derive bullets from `git log` since the last version tag.
+
+### 3. Draft GitHub release note (V{version} style)
+
+```markdown
+## ZIDE IntelliJ Plugin v{version}
+
+IntelliJ IDEA plugin for Zoho ZIDE workflows — project create, Tomcat lifecycle, deploy sync, and debug.
+
+**Requires:** IntelliJ IDEA 2024.3+ (Community or Ultimate)
+
+### Highlights
+- **Short headline** — one-line benefit
+
+### What's new
+#### Debug
+- bullet…
+
+### Install
+1. Download `zide-intelliJ-plugin-{version}.zip` from this release
+2. IntelliJ → **Settings → Plugins → ⚙️ → Install Plugin from Disk…**
+3. Select the zip → restart the IDE
+```
+
+Do **not** create a git tag, GitHub release, or commit unless the user explicitly asks.
+
+After the three steps, run `./gradlew clean buildPlugin` and report the zip path.
